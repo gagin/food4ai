@@ -12,7 +12,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/sabhiram/go-gitignore"
+	gitignore "github.com/sabhiram/go-gitignore"
 )
 
 // --- Custom Flag Type (Keep as is) ---
@@ -182,7 +182,7 @@ func generateConcatenatedCode(
 	if useGitignore {
 		gitignorePath := filepath.Join(targetDir, ".gitignore")
 		if _, err := os.Stat(gitignorePath); err == nil {
-			ignorer, err = gitignore.CompileIgnoreFile(gitignorePath)
+			ignorer, err = gitignore.CompileIgnoreFile(gitignorePath) // Use 'ignore' here
 			if err != nil {
 				log.Printf("Warning: Error compiling %s: %v. Proceeding without gitignore rules.", gitignorePath, err)
 				ignorer = nil
