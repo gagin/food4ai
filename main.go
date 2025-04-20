@@ -2,17 +2,13 @@
 package main
 
 import (
-	"errors"
 	"flag"
 	"fmt"
 	"io/fs"
 	"log/slog" // Import slog
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
-
-	gitignore "github.com/sabhiram/go-gitignore"
 )
 
 // --- Custom Flag Type ---
@@ -105,286 +101,50 @@ func processExtensions(extList []string) map[string]struct{} {
 }
 
 // generateConcatenatedCode now uses slog for logging
-func generateConcatenatedCode(
-	targetDir string,
-	extensionsToUse map[string]struct{},
-	manualFiles []string,
-	excludePatternsToUse []string,
-	useGitignore bool,
-	headerText string,
-	commentStart string,
-) (string, error) {
+func generateConcatenatedCode(dir string, exts map[string]struct{}, manualFiles, excludePatterns []string, useGitignore bool, header, marker string) (string, error) {
+	var output strings.Builder
+	output.WriteString(header + "\n\n")
 
-	commentEnd := commentStart
-	outputParts := []string{headerText + "\n"}
-	filesToProcess := make(map[string]struct{}) // Absolute paths
-	var emptyFilePaths []string                 // Store paths of empty files
-
-	cwd, _ := os.Getwd()
-	cwdAbs, _ := filepath.Abs(cwd)
-	targetDirAbs, err := filepath.Abs(targetDir)
-	if err != nil {
-		slog.Warn("Could not get absolute path for target directory, proceeding with relative path.", "target", targetDir, "error", err)
-		targetDirAbs = targetDir // Use original path
-	}
-
-	// --- 1. Process Manually Specified Files ---
-	if len(manualFiles) > 0 {
-		slog.Info("Processing manually specified files (bypassing filters).")
-		for _, fileStr := range manualFiles {
-			absPath, err := filepath.Abs(fileStr)
-			if err != nil {
-				slog.Warn("Error getting absolute path for manual file, skipping.", "file", fileStr, "error", err)
-				continue
-			}
-			fileInfo, err := os.Stat(absPath)
-			if err != nil {
-				if os.IsNotExist(err) {
-					slog.Warn("Manual file not found, skipping.", "file", fileStr)
-				} else {
-					slog.Warn("Error stating manual file, skipping.", "file", fileStr, "error", err)
-				}
-				continue
-			}
-			if fileInfo.IsDir() {
-				slog.Warn("Manual path is a directory, skipping.", "path", fileStr)
-				continue
-			}
-			if _, exists := filesToProcess[absPath]; exists {
-				slog.Debug("Skipping duplicate manual file.", "file", fileStr)
-			} else {
-				slog.Debug("Adding manual file.", "file", fileStr, "absolute_path", absPath)
-				filesToProcess[absPath] = struct{}{}
-			}
-		}
-	}
-
-	// --- 2. Process Directory Scan ---
-	foundInScan := 0
-	skippedByIgnore := 0
-	skippedByExclude := 0
-	var ignorer *gitignore.GitIgnore
-
-	// Load gitignore if enabled
-	if useGitignore {
-		gitignorePath := filepath.Join(targetDir, ".gitignore")
-		if _, err := os.Stat(gitignorePath); err == nil {
-			ignorer, err = gitignore.CompileIgnoreFile(gitignorePath)
-			if err != nil {
-				slog.Warn("Error compiling gitignore file, proceeding without gitignore rules.", "path", gitignorePath, "error", err)
-				ignorer = nil // Ensure ignorer is nil on error
-			} else {
-				slog.Info("Applying .gitignore rules.", "path", gitignorePath)
-			}
-		} else if !errors.Is(err, os.ErrNotExist) {
-			slog.Warn("Could not stat gitignore file.", "path", gitignorePath, "error", err)
-		} else {
-			slog.Info("No .gitignore file found in target directory.")
-		}
-	}
-
-	dirInfo, err := os.Stat(targetDir)
-	if err == nil && dirInfo.IsDir() {
-		slog.Info("Scanning directory.", "path", targetDirAbs)
-		if len(extensionsToUse) > 0 {
-			extKeys := make([]string, 0, len(extensionsToUse))
-			for k := range extensionsToUse {
-				extKeys = append(extKeys, k)
-			}
-			sort.Strings(extKeys)
-			slog.Debug("Looking for file extensions.", "extensions", extKeys)
-		} else {
-			slog.Info("No extensions specified for directory scan (only processing manual files).")
-		}
-		slog.Debug("Applying .gitignore rules status.", "enabled", useGitignore && ignorer != nil)
-		if len(excludePatternsToUse) > 0 {
-			slog.Debug("Applying exclude patterns.", "patterns", excludePatternsToUse)
-		} else {
-			slog.Debug("No exclude patterns specified.")
-		}
-
-		if len(extensionsToUse) > 0 { // Only walk if there are extensions to find
-			walkErr := filepath.WalkDir(targetDir, func(path string, d fs.DirEntry, walkErrIn error) error {
-				if walkErrIn != nil {
-					slog.Warn("Error accessing path during scan, skipping entry.", "path", path, "error", walkErrIn)
-					if d != nil && d.IsDir() {
-						return fs.SkipDir // Try to skip the whole dir if possible
-					}
-					return nil // Skip just this entry
-				}
-
-				// --- Get Relative Path (best effort) ---
-				relPath, relErr := filepath.Rel(targetDirAbs, path)
-				relPathSlash := filepath.ToSlash(relPath) // Convert to slashes for matching
-				if relErr != nil {
-					slog.Debug("Could not get relative path, using base name for matching.", "path", path, "error", relErr)
-					relPathSlash = filepath.Base(path) // Fallback for matching
-				}
-
-				// --- Filter Directories ---
-				if d.IsDir() {
-					// Check gitignore
-					if ignorer != nil && ignorer.MatchesPath(relPathSlash) {
-						slog.Debug("Skipping ignored directory (gitignore).", "path", path)
-						return fs.SkipDir
-					}
-					// Check exclude patterns (match full relative path or just name)
-					for _, pattern := range excludePatternsToUse {
-						matchRel, _ := filepath.Match(pattern, relPathSlash)
-						matchBase, _ := filepath.Match(pattern, d.Name())
-						if matchRel || matchBase {
-							slog.Debug("Skipping excluded directory (pattern).", "path", path, "pattern", pattern)
-							return fs.SkipDir
-						}
-					}
-					return nil // Directory is not ignored/excluded, continue descent
-				}
-
-				// --- Filter Files ---
-				// 1. Check Extension
-				ext := strings.ToLower(filepath.Ext(path))
-				if _, shouldInclude := extensionsToUse[ext]; !shouldInclude {
-					return nil // Skip file with non-matching extension
-				}
-
-				// 2. Resolve Absolute Path (needed for uniqueness check)
-				absPath, absErr := filepath.Abs(path)
-				if absErr != nil {
-					slog.Warn("Could not get absolute path for file, skipping.", "path", path, "error", absErr)
-					return nil
-				}
-
-				// 3. Check if already added manually
-				if _, exists := filesToProcess[absPath]; exists {
-					return nil // Already included via -f
-				}
-
-				// 4. Check .gitignore
-				if ignorer != nil && ignorer.MatchesPath(relPathSlash) {
-					slog.Debug("Skipping ignored file (gitignore).", "path", path)
-					skippedByIgnore++
-					return nil
-				}
-
-				// 5. Check Explicit Excludes (match full relative path or just basename)
-				excludeMatch := false
-				for _, pattern := range excludePatternsToUse {
-					matchRel, _ := filepath.Match(pattern, relPathSlash)
-					matchBase, _ := filepath.Match(pattern, filepath.Base(path))
-					if matchRel || matchBase {
-						slog.Debug("Skipping excluded file (pattern).", "path", path, "pattern", pattern)
-						excludeMatch = true
-						break
-					}
-				}
-				if excludeMatch {
-					skippedByExclude++
-					return nil
-				}
-
-				// --- Add File ---
-				filesToProcess[absPath] = struct{}{}
-				foundInScan++
-				return nil
-			}) // End WalkDir func
-
-			if walkErr != nil {
-				// Log the error that stopped the walk (if any)
-				slog.Error("Directory scan terminated unexpectedly.", "error", walkErr)
-			}
-		} else {
-			slog.Info("Skipping directory walk as no extensions were specified for inclusion.")
-		}
-
-		// Log scan summary
-		slog.Info("Directory scan complete.", "found", foundInScan, "skipped_gitignore", skippedByIgnore, "skipped_exclude", skippedByExclude)
-
-	} else if err != nil { // Error stating target dir
-		errMsg := fmt.Sprintf("Target directory '%s' not found or is not accessible.", targetDir)
-		slog.Error(errMsg, "error", err)
-		// Only return error if NO manual files were provided either
-		if len(manualFiles) == 0 {
-			return "", errors.New(errMsg)
-		} else {
-			slog.Warn("Proceeding with only manually specified files due to directory error.")
-		}
-	} else if !dirInfo.IsDir() { // Target exists but is not a dir
-		errMsg := fmt.Sprintf("Target '%s' is not a directory.", targetDir)
-		slog.Error(errMsg)
-		if len(manualFiles) == 0 {
-			return "", errors.New(errMsg)
-		} else {
-			slog.Warn("Proceeding with only manually specified files as target is not a directory.")
-		}
-	} else {
-		// This case might happen if the directory is valid but no extensions were provided for scanning.
-		slog.Info("Target is a directory, but no extensions provided for scanning.")
-	}
-
-	// --- 3. Sort and Concatenate ---
-	if len(filesToProcess) == 0 {
-		slog.Warn("No files found to process (either from scan or manual input).")
-		return headerText + "\n", nil // Return just the header
-	}
-
-	allFilesSorted := make([]string, 0, len(filesToProcess))
-	for absPath := range filesToProcess {
-		allFilesSorted = append(allFilesSorted, absPath)
-	}
-	sort.Strings(allFilesSorted) // Sort by absolute path for consistent order
-
-	totalFiles := len(allFilesSorted)
-	processedCount := 0
-	slog.Info(fmt.Sprintf("Processing %d unique files...", totalFiles))
-
-	for i, absPath := range allFilesSorted {
-		// Determine display path (relative to CWD if possible, POSIX style)
-		displayPath := absPath
-		if cwdAbs != "" {
-			relPath, err := filepath.Rel(cwdAbs, absPath)
-			if err == nil {
-				displayPath = relPath
-			}
-		}
-		displayPathPosix := filepath.ToSlash(displayPath)
-
-		slog.Debug("Processing file.", "index", i+1, "total", totalFiles, "path", displayPathPosix)
-
-		contentBytes, err := os.ReadFile(absPath)
+	// Validate exclude patterns
+	for _, pattern := range excludePatterns {
+		_, err := filepath.Match(pattern, "")
 		if err != nil {
-			// Include header/footer for files that failed to read, log warning
-			errorMsg := fmt.Sprintf("# Error reading file %s: %v", displayPathPosix, err)
-			outputParts = append(outputParts, fmt.Sprintf("\n%s %s\n%s\n%s\n",
-				commentStart, displayPathPosix, errorMsg, commentEnd))
-			slog.Warn("Error reading file content, skipping content.", "file", displayPathPosix, "error", err)
-			continue // Go to next file
-		}
-
-		// Handle Empty vs Non-Empty
-		if len(contentBytes) == 0 {
-			emptyFilePaths = append(emptyFilePaths, displayPathPosix)
-			slog.Debug("Found empty file.", "file", displayPathPosix)
-		} else {
-			// Append non-empty file content with markers
-			outputParts = append(outputParts, fmt.Sprintf("\n%s %s\n", commentStart, displayPathPosix))
-			outputParts = append(outputParts, string(contentBytes))
-			outputParts = append(outputParts, fmt.Sprintf("\n%s\n", commentEnd))
-			processedCount++
+			slog.Warn("Invalid exclude pattern", "pattern", pattern, "error", err)
+			continue
 		}
 	}
 
-	// Append the list of empty files, if any
-	if len(emptyFilePaths) > 0 {
-		slog.Info(fmt.Sprintf("Found %d empty files.", len(emptyFilePaths)))
-		sort.Strings(emptyFilePaths) // Sort empty file paths for consistent output
-		outputParts = append(outputParts, "\nEmpty files:\n")
-		for _, emptyPath := range emptyFilePaths {
-			outputParts = append(outputParts, fmt.Sprintf("\t%s\n", emptyPath))
+	// Example file scanning
+	err := filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
 		}
+		if d.IsDir() {
+			return nil
+		}
+		if _, ok := exts[strings.ToLower(filepath.Ext(path))]; !ok {
+			return nil
+		}
+		for _, pattern := range excludePatterns {
+			if matched, _ := filepath.Match(pattern, filepath.Base(path)); matched {
+				slog.Debug("Skipping excluded file", "path", path, "pattern", pattern)
+				return nil
+			}
+		}
+		content, err := os.ReadFile(path)
+		if err != nil {
+			slog.Warn("Error reading file", "path", path, "error", err)
+			output.WriteString(fmt.Sprintf("%s %s\n# Error reading file: %v\n%s\n", marker, path, err, marker))
+			return nil
+		}
+		output.WriteString(fmt.Sprintf("%s %s\n%s\n%s\n", marker, path, content, marker))
+		return nil
+	})
+	if err != nil {
+		return "", err
 	}
 
-	slog.Info("Finished processing.", "non_empty_files", processedCount, "empty_files", len(emptyFilePaths))
-	return strings.Join(outputParts, ""), nil
+	return output.String(), nil
 }
 
 func main() {
