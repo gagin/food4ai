@@ -24,11 +24,10 @@ Assuming you have Go installed and your GOPATH/GOBIN is set up:
 
 .. code-block:: bash
 
-    go install github.com/gagin/food4ai@latest
-    # Or build from source:
-    # git clone https://github.com/gagin/food4ai.git
-    # cd food4ai
-    # go build -o food4ai .
+    # Build from source:
+    git clone https://github.com/gagin/food4ai.git
+    cd food4ai
+    go build -o food4ai .
 
 Move the resulting ``food4ai`` executable to a directory in your system's PATH
 (e.g., ``/usr/local/bin`` or ``~/bin``) to run it from anywhere.
