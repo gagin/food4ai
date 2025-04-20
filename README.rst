@@ -119,6 +119,8 @@ The available options are:
     in the target directory by default. Set to ``false`` to disable. Can be
     overridden by the ``--no-gitignore`` command-line flag.
 
+Note that files specified with the ``-f`` flag are always included, regardless of ``.gitignore`` files or ``exclude_patterns`` defined here.
+
 Command-line flags take precedence over the configuration file settings.
 
 Output Format
