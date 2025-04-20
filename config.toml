@@ -1,4 +1,4 @@
-# Example ~/.config/food4ai/config.toml
+# Example ~/.config/codecat/config.toml
 
 # The introductory text placed at the very beginning of the output.
 header_text = "Codebase for analysis:"

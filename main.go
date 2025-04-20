@@ -45,7 +45,7 @@ func init() {
 	pflag.BoolVar(&noGitignore, "no-gitignore", !*defaultConfig.UseGitignore, fmt.Sprintf("Disable .gitignore processing (requires flags mode). Config default: %t", *defaultConfig.UseGitignore))
 	pflag.StringVar(&logLevelStr, "loglevel", "info", "Set logging verbosity (debug, info, warning, error).")
 	pflag.StringVarP(&outputFile, "output", "o", "", "Output file path (writes code to file, summary to stdout).")
-	pflag.StringVarP(&configFileFlag, "config", "c", "", "Path to a custom configuration file (overrides default ~/.config/food4ai/config.toml).")
+	pflag.StringVarP(&configFileFlag, "config", "c", "", "Path to a custom configuration file (overrides default ~/.config/codecat/config.toml).")
 
 	// Define custom usage message using pflag's Usage variable
 	pflag.Usage = func() {

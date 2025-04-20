@@ -6,7 +6,7 @@ set -eu
 set -o pipefail
 
 # --- Configuration ---
-FOOD4AI_BIN_NAME="food4ai"
+CODECAT_BIN_NAME="codecat"
 TEST_PASSED_COUNT=0
 # TEST_FAILED_COUNT no longer needed
 VERBOSE=false
@@ -40,21 +40,21 @@ if [[ "${1:-}" == "-v" ]]; then
 fi
 
 # --- Setup ---
-info "Checking for food4ai binary './${FOOD4AI_BIN_NAME}' in current directory (`pwd`)..."
-if [ ! -x "./${FOOD4AI_BIN_NAME}" ]; then
-  echo "[ERROR] ${FOOD4AI_BIN_NAME} binary not found or not executable in the current directory (`pwd`)." >&2
-  echo "Please compile it first (e.g., go build -o ${FOOD4AI_BIN_NAME} .) and run this script from the same directory." >&2
+info "Checking for codecat binary './${CODECAT_BIN_NAME}' in current directory (`pwd`)..."
+if [ ! -x "./${CODECAT_BIN_NAME}" ]; then
+  echo "[ERROR] ${CODECAT_BIN_NAME} binary not found or not executable in the current directory (`pwd`)." >&2
+  echo "Please compile it first (e.g., go build -o ${CODECAT_BIN_NAME} .) and run this script from the same directory." >&2
   exit 1
 fi
-FOOD4AI_ABS_PATH="$(pwd)/${FOOD4AI_BIN_NAME}"
-info "Absolute path to binary determined as: $FOOD4AI_ABS_PATH"
+CODECAT_ABS_PATH="$(pwd)/${CODECAT_BIN_NAME}"
+info "Absolute path to binary determined as: $CODECAT_ABS_PATH"
 
 info "Creating timestamped temporary directory..."
-BASE_TMP_DIR=$(mktemp -d -t food4ai_test_base_XXXXXX)
+BASE_TMP_DIR=$(mktemp -d -t CODECAT_test_base_XXXXXX)
 TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
 declare TEST_DIR="" # Declare variable first
 trap cleanup EXIT   # Set trap *before* assigning directory path
-TEST_DIR="$BASE_TMP_DIR/food4ai_test_$TIMESTAMP"
+TEST_DIR="$BASE_TMP_DIR/CODECAT_test_$TIMESTAMP"
 mkdir -p "$TEST_DIR"
 info "Test directory: $TEST_DIR"
 
@@ -96,7 +96,7 @@ cd "$TEST_DIR" # Run tests from within the temp dir
 
 # === Test Case 1: No args (Default Invocation Path) ===
 info "Test 1: No args (Default Invocation Path - depends on user config)"
-("$FOOD4AI_ABS_PATH" > stdout.log 2> stderr.log) && exit_code=0 || exit_code=$?
+("$CODECAT_ABS_PATH" > stdout.log 2> stderr.log) && exit_code=0 || exit_code=$?
 if [ "$exit_code" -ne 0 ]; then fail "Test 1: Expected exit code 0, got $exit_code"; fi
 # Relaxed checks: just check for config attempt and summary presence
 grep -q -e 'Loading configuration.' -e 'No default config file found' -e 'configuration file is empty' -e 'Could not determine user home directory' stderr.log || fail "Test 1: No config load message found on stderr."
@@ -106,7 +106,7 @@ pass "Test 1: Ran successfully (basic checks passed)."
 
 # === Test Case 2: Single Positional Arg ('proj') (Default Invocation Path) ===
 info "Test 2: Single positional arg ('proj') (Default Invocation Path - depends on user config)"
-("$FOOD4AI_ABS_PATH" proj > stdout.log 2> stderr.log) && exit_code=0 || exit_code=$?
+("$CODECAT_ABS_PATH" proj > stdout.log 2> stderr.log) && exit_code=0 || exit_code=$?
 if [ "$exit_code" -ne 0 ]; then fail "Test 2: Expected exit code 0, got $exit_code"; fi
 # Relaxed checks: check summary seems plausible
 grep -q 'Summary' stderr.log || fail "Test 2: Summary block missing from stderr."
@@ -119,7 +119,7 @@ pass "Test 2: Ran successfully (basic checks passed)."
 
 # === Test Case 3: Flags mode (-d proj -e go,py) using Hardcoded Defaults ===
 info "Test 3: Flags mode (-d proj -e go,py) using Hardcoded Defaults (--config /dev/null)"
-("$FOOD4AI_ABS_PATH" --config /dev/null -d proj -e go,py > stdout.log 2> stderr.log) && exit_code=0 || exit_code=$?
+("$CODECAT_ABS_PATH" --config /dev/null -d proj -e go,py > stdout.log 2> stderr.log) && exit_code=0 || exit_code=$?
 if [ "$exit_code" -ne 0 ]; then fail "Test 3: Expected exit code 0, got $exit_code"; fi
 grep -q 'main.go content' stdout.log || fail "Test 3: main.go content missing."
 grep -q 'utils.py content' stdout.log || fail "Test 3: utils.py content missing."
@@ -133,7 +133,7 @@ pass "Test 3: Passed."
 
 # === Test Case 4: Flags mode with output file (-o output.txt) using Hardcoded Defaults ===
 info "Test 4: Flags mode with output file (-o output.txt) using Hardcoded Defaults (--config /dev/null)"
-("$FOOD4AI_ABS_PATH" --config /dev/null -d proj -o output.txt > stdout.log 2> stderr.log) && exit_code=0 || exit_code=$?
+("$CODECAT_ABS_PATH" --config /dev/null -d proj -o output.txt > stdout.log 2> stderr.log) && exit_code=0 || exit_code=$?
 if [ "$exit_code" -ne 0 ]; then fail "Test 4: Expected exit code 0, got $exit_code"; fi
 grep -q 'main.go content' output.txt || fail "Test 4: main.go content missing from output.txt."
 grep -q 'utils.py content' output.txt || fail "Test 4: utils.py content missing from output.txt."
@@ -152,7 +152,7 @@ pass "Test 4: Passed."
 
 # === Test Case 5: Flags mode with --no-gitignore using Hardcoded Defaults ===
 info "Test 5: Flags mode with --no-gitignore (-d proj --no-gitignore -x \"\" -e go,py,txt,log,json --config /dev/null)"
-("$FOOD4AI_ABS_PATH" --config /dev/null -d proj --no-gitignore -x "" -e go,py,txt,log,json > stdout.log 2> stderr.log) && exit_code=0 || exit_code=$?
+("$CODECAT_ABS_PATH" --config /dev/null -d proj --no-gitignore -x "" -e go,py,txt,log,json > stdout.log 2> stderr.log) && exit_code=0 || exit_code=$?
 if [ "$exit_code" -ne 0 ]; then fail "Test 5: Expected exit code 0, got $exit_code"; fi
 grep -q 'main.go content' stdout.log || fail "Test 5: main.go content missing."
 grep -q 'utils.py content' stdout.log || fail "Test 5: utils.py content missing."
@@ -171,7 +171,7 @@ pass "Test 5: Passed."
 
 # === Test Case 6: Flags mode with manual file (-f manual.txt -d proj -e go) using Hardcoded Defaults ===
 info "Test 6: Flags mode with manual file (-f manual.txt -d proj -e go) using Hardcoded Defaults (--config /dev/null)"
-("$FOOD4AI_ABS_PATH" --config /dev/null -f manual.txt -d proj -e go > stdout.log 2> stderr.log) && exit_code=0 || exit_code=$?
+("$CODECAT_ABS_PATH" --config /dev/null -f manual.txt -d proj -e go > stdout.log 2> stderr.log) && exit_code=0 || exit_code=$?
 if [ "$exit_code" -ne 0 ]; then fail "Test 6: Expected exit code 0, got $exit_code"; fi
 grep -q 'manual content' stdout.log || fail "Test 6: manual.txt content missing."
 grep -q 'main.go content' stdout.log || fail "Test 6: main.go content missing."
@@ -185,7 +185,7 @@ pass "Test 6: Passed."
 # === Test Case 7: Ambiguity - Multiple Positional Args ===
 info "Test 7: Ambiguity - Multiple positional args ('proj' 'manual.txt')"
 # No --config needed
-("$FOOD4AI_ABS_PATH" proj manual.txt > stdout.log 2> stderr.log) && exit_code=0 || exit_code=$?
+("$CODECAT_ABS_PATH" proj manual.txt > stdout.log 2> stderr.log) && exit_code=0 || exit_code=$?
 if [ "$exit_code" -eq 0 ]; then fail "Test 7: Expected non-zero exit code, got 0"; fi
 grep -q 'Refusing execution: Multiple positional arguments' stderr.log || fail "Test 7: Refusal message missing or incorrect."
 grep -q 'Run with --help' stderr.log || fail "Test 7: Help hint missing."
@@ -196,7 +196,7 @@ pass "Test 7: Passed."
 # === Test Case 8: Ambiguity - Positional Arg + Flag ===
 info "Test 8: Ambiguity - Positional arg + flag ('proj' -e go)"
 # No --config needed
-("$FOOD4AI_ABS_PATH" proj -e go > stdout.log 2> stderr.log) && exit_code=0 || exit_code=$?
+("$CODECAT_ABS_PATH" proj -e go > stdout.log 2> stderr.log) && exit_code=0 || exit_code=$?
 if [ "$exit_code" -eq 0 ]; then fail "Test 8: Expected non-zero exit code, got 0"; fi
 grep -q 'Refusing execution: Cannot mix positional argument' stderr.log || fail "Test 8: Refusal message missing or incorrect."
 grep -q -- "flag '--extensions'" stderr.log || fail "Test 8: Conflicting flag name missing/incorrect."
@@ -208,7 +208,7 @@ pass "Test 8: Passed."
 # === Test Case 9: Ambiguity - Positional Arg + Output Flag ===
 info "Test 9: Ambiguity - Positional arg + output flag ('proj' -o out.txt)"
 # No --config needed
-("$FOOD4AI_ABS_PATH" proj -o out.txt > stdout.log 2> stderr.log) && exit_code=0 || exit_code=$?
+("$CODECAT_ABS_PATH" proj -o out.txt > stdout.log 2> stderr.log) && exit_code=0 || exit_code=$?
 if [ "$exit_code" -eq 0 ]; then fail "Test 9: Expected non-zero exit code, got 0"; fi
 grep -q 'Refusing execution: Cannot mix positional argument' stderr.log || fail "Test 9: Refusal message missing or incorrect."
 grep -q -- "flag '--output'" stderr.log || fail "Test 9: Conflicting flag name missing/incorrect."
@@ -221,7 +221,7 @@ pass "Test 9: Passed."
 # === Test Case 10: Non-existent directory ===
 info "Test 10: Non-existent directory (-d no_such_dir)"
 # No --config needed
-("$FOOD4AI_ABS_PATH" -d no_such_dir > stdout.log 2> stderr.log) && exit_code=0 || exit_code=$?
+("$CODECAT_ABS_PATH" -d no_such_dir > stdout.log 2> stderr.log) && exit_code=0 || exit_code=$?
 if [ "$exit_code" -eq 0 ]; then fail "Test 10: Expected non-zero exit code, got 0"; fi
 grep -q 'Target directory does not exist' stderr.log || grep -q 'level=ERROR.*Target directory does not exist' stderr.log || fail "Test 10: Error message missing or incorrect."
 [ ! -s stdout.log ] || fail "Test 10: Stdout not empty."
@@ -231,7 +231,7 @@ pass "Test 10: Passed."
 # === Test Case 11: Custom Config File ===
 info "Test 11: Custom config file (--config $TEST_CONFIG_ABS_PATH -d proj)"
 # Assertions are based on test_config.toml content. Failures here likely indicate an app bug.
-("$FOOD4AI_ABS_PATH" -d proj --config "$TEST_CONFIG_ABS_PATH" > stdout.log 2> stderr.log) && exit_code=0 || exit_code=$?
+("$CODECAT_ABS_PATH" -d proj --config "$TEST_CONFIG_ABS_PATH" > stdout.log 2> stderr.log) && exit_code=0 || exit_code=$?
 if [ "$exit_code" -ne 0 ]; then fail "Test 11: Expected exit code 0, got $exit_code"; fi
 # Check includes
 grep -q 'Test Config Header' stdout.log || fail "Test 11: Missing custom header."

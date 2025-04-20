@@ -1,4 +1,4 @@
-module food4ai
+module codecat
 
 go 1.24.0
 

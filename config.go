@@ -71,7 +71,7 @@ func loadConfig(customConfigPath string) (Config, error) {
 				// Cannot determine default path, return defaults (not fatal)
 				return cfg, nil
 			}
-			configDir := filepath.Join(homeDir, ".config", "food4ai")
+			configDir := filepath.Join(homeDir, ".config", "codecat")
 			configFile = filepath.Join(configDir, "config.toml")
 			slog.Debug("Attempting to load configuration from default path.", "path", configFile)
 		}

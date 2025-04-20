@@ -13,8 +13,6 @@ import (
 	"strings"
 	"testing"
 
-	// NO import of "food4ai" needed when in the same package
-
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

@@ -1,5 +1,6 @@
-food4ai
+codecat
 =======
+**Version:** 0.2.0
 
 A command-line tool to concatenate source code files into a single output,
 formatted for easy consumption by Large Language Models (LLMs) or other AI
@@ -12,7 +13,7 @@ When working with AI models for code analysis, refactoring, or question
 answering, it's often necessary to provide the model with context from your
 codebase. Manually copying and pasting files is tedious and error-prone.
 
-``food4ai`` automates this process by scanning a target directory, filtering
+``codecat`` automates this process by scanning a target directory, filtering
 files based on extensions, exclusion patterns, and ``.gitignore`` rules,
 and concatenating their contents into a single output stream or file. Each
 file's content is clearly delimited with markers indicating the filename.
@@ -25,11 +26,11 @@ Assuming you have Go installed and your GOPATH/GOBIN is set up:
 .. code-block:: bash
 
     # Build from source:
-    git clone https://github.com/gagin/food4ai.git
-    cd food4ai
-    go build -o food4ai .
+    git clone https://github.com/gagin/codecat.git
+    cd codecat
+    go build -o codecat .
 
-Move the resulting ``food4ai`` executable to a directory in your system's PATH
+Move the resulting ``codecat`` executable to a directory in your system's PATH
 (e.g., ``/usr/local/bin`` or ``~/bin``) to run it from anywhere.
 
 Usage
@@ -43,7 +44,7 @@ Scan a single directory using default or config settings. Cannot be mixed with m
 
 .. code-block:: bash
 
-    food4ai [target_directory]
+    codecat [target_directory]
 
 * ``target_directory``: The directory to scan. Defaults to '.' if omitted.
 
@@ -53,7 +54,7 @@ Use flags for specific control (directory, extensions, files, excludes, output).
 
 .. code-block:: bash
 
-    food4ai [flags]
+    codecat [flags]
 
 **Flags:**
 
@@ -76,7 +77,7 @@ Use flags for specific control (directory, extensions, files, excludes, output).
     Write concatenated code to *path* instead of stdout. Summary/logs go to stdout. If omitted, code goes to stdout and summary/logs go to stderr.
 
 * **--config** *path*
-    Path to a custom configuration file. Defaults to ``~/.config/food4ai/config.toml``.
+    Path to a custom configuration file. Defaults to ``~/.config/codecat/config.toml``.
 
 * **--loglevel** *(debug|info|warn|error)*
     Set logging verbosity. Defaults to ``info``. Logs always go to stderr.
@@ -91,8 +92,8 @@ Use flags for specific control (directory, extensions, files, excludes, output).
 Configuration
 -------------
 
-``food4ai`` can be configured using a TOML file, typically located at
-``~/.config/food4ai/config.toml`` (changeable with ``--config``).
+``codecat`` can be configured using a TOML file, typically located at
+``~/.config/codecat/config.toml`` (changeable with ``--config``).
 
 Example (`config.toml`):
 
@@ -187,16 +188,16 @@ Example Usage
 
 Scan directory `src` using defaults, sending code to stdout, summary to stderr:
 .. code-block:: bash
-    food4ai src
+    codecat src
 
 Scan current directory, include only Go files, exclude vendor dir, write code to `codebase.txt`, summary to stdout:
 .. code-block:: bash
-    food4ai -e go -x "vendor/*" -o codebase.txt
+    codecat -e go -x "vendor/*" -o codebase.txt
 
 Include specific file and all `.yaml` files from `conf` directory, sending code to stdout, summary to stderr:
 .. code-block:: bash
-    food4ai -f config/main.toml -d conf -e yaml
+    codecat -f config/main.toml -d conf -e yaml
 
 Process only a specific manual file, sending code to `manual_only.txt`, summary to stdout:
 .. code-block:: bash
-    food4ai -f /path/to/important/file.py -o manual_only.txt
+    codecat -f /path/to/important/file.py -o manual_only.txt
