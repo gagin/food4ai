@@ -1,6 +1,6 @@
 codecat
 =======
-**Version:** 0.2.0
+**Version:** 0.2.2
 
 A command-line tool to concatenate source code files into a single output,
 formatted for easy consumption by Large Language Models (LLMs) or other AI
@@ -209,5 +209,6 @@ Version History
 
 To-Do and Known Problems
 ------------------------
-- Follows `most specific` approach for .gitignore instead of standard `first-seen`
+- Follows `most specific` approach for .gitignore instead of standard `first-seen`. Unclear where it's b/c of the library.
 - main_test fails
+- need to auto-update version number in readme as well
