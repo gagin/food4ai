@@ -1,1 +1,4 @@
 .aider*
+ignored_dir/
+!ignored_dir/keep_this.txt
+
