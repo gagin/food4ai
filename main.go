@@ -1,5 +1,4 @@
 // main.go
-// Defines the main entry point and CLI argument parsing for food4ai using pflag.
 package main
 
 import (
@@ -12,15 +11,15 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
-	"time" // Added for timestamp comment
+	"time"
 
 	gitignorelib "github.com/sabhiram/go-gitignore"
-	pflag "github.com/spf13/pflag" // Use pflag library
+	pflag "github.com/spf13/pflag"
 )
 
 // --- File Info Struct ---
 type FileInfo struct {
-	Path     string // Relative path from targetDir (or absolute if manual and outside)
+	Path     string
 	Size     int64
 	IsManual bool
 }
@@ -28,40 +27,28 @@ type FileInfo struct {
 // --- Global Variables for Flags ---
 var (
 	targetDirFlagValue string
-	extensions         []string // Use []string with pflag
-	manualFiles        []string // Use []string with pflag
-	excludePatterns    []string // Use []string with pflag
+	extensions         []string
+	manualFiles        []string
+	excludePatterns    []string
 	noGitignore        bool
 	logLevelStr        string
 	outputFile         string
 	configFileFlag     string
 )
 
-// Helper function to check if a flag was explicitly set on the command line
-// Needed because pflag.Visit visits all flags, not just changed ones like standard flag.Visit
-// pflag.CommandLine.Changed(name) is the preferred way now.
-// func isFlagPassed(name string) bool { // No longer strictly needed if using Changed()
-// 	 return pflag.CommandLine.Changed(name)
-// }
-
 func init() {
 	// Define command-line flags using pflag
-	// StringVarP defines long name, short name (single char), default value, usage
 	pflag.StringVarP(&targetDirFlagValue, "directory", "d", ".", "Target directory to scan (use this OR a positional argument, not both).")
-	// StringSliceVarP defines slice flags, handles comma-separation and repetition
 	pflag.StringSliceVarP(&extensions, "extensions", "e", defaultConfig.IncludeExtensions, fmt.Sprintf("Comma-separated file extensions to include (requires flags mode). Default: %v", defaultConfig.IncludeExtensions))
 	pflag.StringSliceVarP(&manualFiles, "files", "f", []string{}, "Comma-separated specific file paths to include manually (requires flags mode).")
 	pflag.StringSliceVarP(&excludePatterns, "exclude", "x", defaultConfig.ExcludePatterns, fmt.Sprintf("Comma-separated glob patterns to exclude (requires flags mode). Default: %v", defaultConfig.ExcludePatterns))
-	// BoolVar usually doesn't have a short version unless standard; use BoolVarP if needed
 	pflag.BoolVar(&noGitignore, "no-gitignore", !*defaultConfig.UseGitignore, fmt.Sprintf("Disable .gitignore processing (requires flags mode). Config default: %t", *defaultConfig.UseGitignore))
 	pflag.StringVar(&logLevelStr, "loglevel", "info", "Set logging verbosity (debug, info, warning, error).")
 	pflag.StringVarP(&outputFile, "output", "o", "", "Output file path (writes code to file, summary to stdout).")
-	// Use StringVarP to add the -c short option for config
 	pflag.StringVarP(&configFileFlag, "config", "c", "", "Path to a custom configuration file (overrides default ~/.config/food4ai/config.toml).")
 
 	// Define custom usage message using pflag's Usage variable
 	pflag.Usage = func() {
-		// Write custom header directly to stderr (pflag default output)
 		fmt.Fprintf(os.Stderr, `Usage: %s [target_directory]
    or: %s [flags]
 
@@ -79,20 +66,16 @@ Output:
   - With -o <file>: Code to <file>, Summary/Logs to stdout.
 
 Flags:
-`, os.Args[0], os.Args[0]) // Use os.Args[0] for program name
-
-		// Use pflag's default printer for flag descriptions
+`, os.Args[0], os.Args[0])
 		pflag.PrintDefaults()
 	}
 }
 
 // --- Main Execution ---
 func main() {
-	// Add a timestamp comment for context
-	// Current time: Saturday, April 19, 2025 at 11:43:51 PM PDT
+	// Current time: Sunday, April 20, 2025 at 12:35:54 AM PDT
 	_ = time.Now()
 
-	// Parse flags using pflag
 	pflag.Parse()
 
 	// --- Setup Logging (Always to Stderr) ---
@@ -107,60 +90,50 @@ func main() {
 	slog.SetDefault(logger)
 
 	// --- Load Configuration ---
-	// Use pflag.CommandLine.Changed(name) to see if flag was set from command line
 	configFlagPassed := pflag.CommandLine.Changed("config")
-	appConfig, loadErr := loadConfig(configFileFlag) // Pass the value from the --config / -c flag
+	appConfig, loadErr := loadConfig(configFileFlag)
 	if loadErr != nil {
 		slog.Error("Failed to load configuration.", "error", loadErr)
 		if configFlagPassed {
-			// If a specific config file was requested and failed, exit.
 			fmt.Fprintf(os.Stderr, "Error: Could not load specified configuration file '%s': %v\n", configFileFlag, loadErr)
 			os.Exit(1)
 		} else {
-			// If default config loading failed, warn but proceed with hardcoded defaults.
 			slog.Warn("Proceeding with default settings due to config load issue.")
 		}
 	}
+	// *** DEBUG: Log loaded extensions ***
+	slog.Debug("Loaded config extensions check", "config_path_flag", configFileFlag, "loaded_extensions", appConfig.IncludeExtensions)
 
 	// --- Argument Mode Validation ---
-	positionalArgs := pflag.Args() // Use pflag.Args() to get non-flag arguments
+	positionalArgs := pflag.Args()
 	finalTargetDirectory := ""
 
 	var conflictingFlagSet bool = false
 	var firstConflict string = ""
-	// Define flags that are NOT considered operational/conflicting for ambiguity checks
 	metaFlags := map[string]struct{}{
-		"help":     {}, // pflag automatically adds --help
+		"help":     {},
 		"loglevel": {},
-		// Add "version" here if implemented
 	}
 
-	// Iterate over flags *actually set* on the command line using pflag.Visit
 	pflag.Visit(func(f *pflag.Flag) {
 		if _, isMeta := metaFlags[f.Name]; !isMeta {
-			// If a flag was set and it's not in our metaFlags list, it conflicts with positional args
 			conflictingFlagSet = true
 			if firstConflict == "" {
-				firstConflict = f.Name // Record the first conflicting flag found
+				firstConflict = f.Name
 			}
 		}
 	})
 
 	if len(positionalArgs) > 1 {
-		// Case A: Multiple positional args -> Refusal Message
 		refusalMsg := fmt.Sprintf("Refusing execution: Multiple positional arguments provided: %v.\nUse either a single directory argument OR flags, not both. Run with --help for usage details.", positionalArgs)
 		fmt.Fprintln(os.Stderr, refusalMsg)
 		os.Exit(1)
 	} else if len(positionalArgs) == 1 {
-		// Case B: Single positional arg
 		if conflictingFlagSet {
-			// Refusal Message: Mixed positional arg with an operational flag
-			// Include the specific conflicting flag name found
 			refusalMsg := fmt.Sprintf("Refusing execution: Cannot mix positional argument '%s' with flag '--%s'.\nPlease use flags exclusively for complex commands. Run with --help for usage details.", positionalArgs[0], firstConflict)
 			fmt.Fprintln(os.Stderr, refusalMsg)
 			os.Exit(1)
 		} else {
-			// Valid: Use positional arg as target directory
 			finalTargetDirectory = positionalArgs[0]
 			if finalTargetDirectory == "" {
 				finalTargetDirectory = "."
@@ -168,7 +141,6 @@ func main() {
 			slog.Debug("Using target directory from positional argument.", "path", finalTargetDirectory)
 		}
 	} else {
-		// Case C: No positional args -> Flags mode
 		finalTargetDirectory = targetDirFlagValue
 		slog.Debug("Using flags mode. Target directory from -d or default.", "path", finalTargetDirectory)
 	}
@@ -209,37 +181,44 @@ func main() {
 
 	var finalExtensionsList []string
 	if pflag.CommandLine.Changed("extensions") {
-		slog.Debug("Using extensions from command line.", "extensions", extensions)
+		slog.Debug("Using extensions from command line flag.", "extensions", extensions)
 		finalExtensionsList = extensions
 	} else if len(appConfig.IncludeExtensions) > 0 {
-		slog.Debug("Using extensions from config.", "extensions", appConfig.IncludeExtensions)
+		slog.Debug("Using extensions from loaded config.", "config_extensions", appConfig.IncludeExtensions)
 		finalExtensionsList = appConfig.IncludeExtensions
 	} else {
-		slog.Debug("No extensions specified via command line or config. Using hardcoded default.", "extensions", defaultConfig.IncludeExtensions)
+		slog.Debug("No extensions specified via flag or config. Using hardcoded default.", "default_extensions", defaultConfig.IncludeExtensions)
 		finalExtensionsList = defaultConfig.IncludeExtensions
 	}
 	finalExtensionsSet := processExtensions(finalExtensionsList)
+	// *** DEBUG: Log final extension set being used ***
+	debugExtensions := mapsKeys(finalExtensionsSet) // Get keys for logging
+	slog.Debug("Final extension set prepared", "set_keys", debugExtensions)
 
 	var finalExcludePatternsList []string
 	if pflag.CommandLine.Changed("exclude") {
-		slog.Debug("Using exclude patterns from command line.", "patterns", excludePatterns)
+		slog.Debug("Using exclude patterns from command line flag.", "patterns", excludePatterns)
 		finalExcludePatternsList = excludePatterns
 	} else {
-		slog.Debug("Using exclude patterns from config.", "patterns", appConfig.ExcludePatterns)
+		slog.Debug("Using exclude patterns from loaded config.", "patterns", appConfig.ExcludePatterns)
 		finalExcludePatternsList = appConfig.ExcludePatterns
 		if finalExcludePatternsList == nil {
 			finalExcludePatternsList = []string{}
 		}
 	}
+	// *** DEBUG: Log final exclude patterns ***
+	slog.Debug("Final exclude patterns", "patterns", finalExcludePatternsList)
 
 	var finalUseGitignore bool
 	if pflag.CommandLine.Changed("no-gitignore") {
-		finalUseGitignore = !noGitignore // Value of noGitignore is true if flag is present
-		slog.Debug("Using gitignore setting from command line.", "use_gitignore", finalUseGitignore)
+		finalUseGitignore = !noGitignore
+		slog.Debug("Using gitignore setting from command line flag.", "use_gitignore", finalUseGitignore)
 	} else {
 		finalUseGitignore = *appConfig.UseGitignore
-		slog.Debug("Using gitignore setting from config.", "use_gitignore", finalUseGitignore)
+		slog.Debug("Using gitignore setting from loaded config.", "use_gitignore", finalUseGitignore)
 	}
+	// *** DEBUG: Log final gitignore setting ***
+	slog.Debug("Final useGitignore setting", "value", finalUseGitignore)
 
 	// --- Input Validation ---
 	if len(finalExtensionsSet) == 0 && len(manualFiles) == 0 {
@@ -250,12 +229,12 @@ func main() {
 	// --- Generate Output ---
 	concatenatedOutput, includedFiles, emptyFiles, errorFiles, totalSize, genErr := generateConcatenatedCode(
 		finalTargetDirectory,
-		finalExtensionsSet,
+		finalExtensionsSet, // Pass the final set
 		manualFiles,
-		finalExcludePatternsList,
-		finalUseGitignore,
-		headerText,
-		commentMarker,
+		finalExcludePatternsList, // Pass the final list
+		finalUseGitignore,        // Pass the final bool
+		headerText,               // Pass loaded/default value
+		commentMarker,            // Pass loaded/default value
 	)
 	if genErr != nil {
 		slog.Error("Error during file processing, results may be incomplete.", "error", genErr)
@@ -311,7 +290,7 @@ func main() {
 	slog.Debug("Execution finished.")
 
 	if genErr != nil || len(errorFiles) > 0 {
-		os.Exit(1) // Exit with error status if issues occurred
+		os.Exit(1)
 	}
 }
 
@@ -321,7 +300,6 @@ func main() {
 func processExtensions(extList []string) map[string]struct{} {
 	processed := make(map[string]struct{})
 	for _, ext := range extList {
-		// Handle potential multiple extensions in one string if comma used with repetition
 		parts := strings.Split(ext, ",")
 		for _, part := range parts {
 			cleaned := strings.TrimSpace(strings.ToLower(part))
@@ -337,10 +315,10 @@ func processExtensions(extList []string) map[string]struct{} {
 	return processed
 }
 
-// generateConcatenatedCode implementation remains the same.
+// generateConcatenatedCode implementation - ADDING DEBUG LOGS INSIDE WALK
 func generateConcatenatedCode(
 	dir string,
-	exts map[string]struct{},
+	exts map[string]struct{}, // This is the final set passed from main
 	manualFilePaths []string,
 	excludePatterns []string,
 	useGitignore bool,
@@ -374,6 +352,8 @@ func generateConcatenatedCode(
 	processedFiles := make(map[string]bool)
 	totalSize = 0
 
+	// --- Process Manually Added Files ---
+	// (Manual file processing logic remains the same - already has debug logs)
 	if len(manualFilePaths) > 0 {
 		slog.Debug("Processing manually specified files.", "count", len(manualFilePaths))
 		for _, manualPath := range manualFilePaths {
@@ -478,42 +458,54 @@ func generateConcatenatedCode(
 			}
 			relPath = filepath.ToSlash(relPath)
 
+			// *** DEBUG: Log entry being processed ***
+			slog.Debug("Walk: Processing entry", "path", relPath, "is_dir", d.IsDir())
+
 			if d.IsDir() {
 				if relPath == "." {
 					return nil
 				}
 
 				if d.Name() == ".git" {
-					slog.Debug("Skipping .git directory.", "path", relPath)
+					slog.Debug("Walk: Skipping .git directory.", "path", relPath)
 					return fs.SkipDir
 				}
 				if gitignore != nil && gitignore.Match(relPath, true) {
-					slog.Debug("Skipping directory due to gitignore.", "path", relPath)
+					slog.Debug("Walk: Skipping directory due to gitignore.", "path", relPath)
 					return fs.SkipDir
 				}
 				for _, pattern := range excludePatterns {
 					matchRel, _ := filepath.Match(pattern, relPath)
 					matchName, _ := filepath.Match(pattern, d.Name())
 					if matchRel || matchName {
-						slog.Debug("Skipping directory due to exclude pattern.", "path", relPath, "pattern", pattern)
+						slog.Debug("Walk: Skipping directory due to exclude pattern.", "path", relPath, "pattern", pattern)
 						return fs.SkipDir
 					}
 				}
-				return nil
+				slog.Debug("Walk: Entering directory", "path", relPath)
+				return nil // Continue into directory
 			}
 
+			// --- File Processing ---
+
 			if processedFiles[absPath] {
-				slog.Debug("Skipping file already processed manually.", "path", relPath)
+				slog.Debug("Walk: Skipping file already processed manually.", "path", relPath)
 				return nil
 			}
 
 			fileExt := strings.ToLower(filepath.Ext(path))
+			// *** DEBUG: Log extension check ***
+			slog.Debug("Walk: Checking file extension", "path", relPath, "extension", fileExt)
 			if _, ok := exts[fileExt]; !ok {
-				return nil
+				// *** DEBUG: Log skip reason ***
+				slog.Debug("Walk: Skipping file - extension not in included set", "path", relPath, "extension", fileExt, "include_set", mapsKeys(exts))
+				return nil // Skip file if extension doesn't match
 			}
+			// *** DEBUG: Log match ***
+			slog.Debug("Walk: Extension matched", "path", relPath, "extension", fileExt)
 
 			if gitignore != nil && gitignore.Match(relPath, false) {
-				slog.Debug("Skipping file due to gitignore.", "path", relPath)
+				slog.Debug("Walk: Skipping file due to gitignore.", "path", relPath)
 				return nil
 			}
 
@@ -521,11 +513,13 @@ func generateConcatenatedCode(
 				matchRel, _ := filepath.Match(pattern, relPath)
 				matchName, _ := filepath.Match(pattern, d.Name())
 				if matchRel || matchName {
-					slog.Debug("Skipping file due to exclude pattern.", "path", relPath, "pattern", pattern)
+					slog.Debug("Walk: Skipping file due to exclude pattern.", "path", relPath, "pattern", pattern)
 					return nil
 				}
 			}
 
+			// --- Read File Content ---
+			slog.Debug("Walk: Reading file content", "path", relPath)
 			content, errRead := os.ReadFile(path)
 			if errRead != nil {
 				slog.Warn("Error reading file content.", "path", relPath, "error", errRead)
@@ -547,7 +541,7 @@ func generateConcatenatedCode(
 				return nil
 			}
 
-			slog.Debug("Adding file content.", "path", relPath, "size", len(content))
+			slog.Debug("Adding file content to output.", "path", relPath, "size", len(content))
 			outputBuilder.WriteString(fmt.Sprintf("%s %s\n%s\n%s\n\n", marker, relPath, string(content), marker))
 			includedFiles = append(includedFiles, FileInfo{Path: relPath, Size: fileSize, IsManual: false})
 			totalSize += fileSize
@@ -578,6 +572,7 @@ func generateConcatenatedCode(
 }
 
 // --- Gitignore Implementation ---
+// (GitignoreMatcher struct, NewGitignoreMatcher, Match methods remain the same)
 type GitignoreMatcher struct {
 	matcher gitignorelib.IgnoreParser
 	root    string
@@ -587,7 +582,6 @@ func NewGitignoreMatcher(root string) (*GitignoreMatcher, error) {
 	gitignorePath := filepath.Join(root, ".gitignore")
 	var matcher gitignorelib.IgnoreParser
 	var err error
-
 	if _, statErr := os.Stat(gitignorePath); os.IsNotExist(statErr) {
 		slog.Debug("No .gitignore file found at root.", "directory", root)
 		matcher = nil
@@ -602,7 +596,6 @@ func NewGitignoreMatcher(root string) (*GitignoreMatcher, error) {
 	}
 	return &GitignoreMatcher{matcher: matcher, root: root}, nil
 }
-
 func (g *GitignoreMatcher) Match(relativePath string, isDir bool) bool {
 	if g.matcher == nil {
 		return false
@@ -611,6 +604,7 @@ func (g *GitignoreMatcher) Match(relativePath string, isDir bool) bool {
 }
 
 // --- Tree Node for Summary ---
+// (TreeNode struct remains the same)
 type TreeNode struct {
 	Name     string
 	Children map[string]*TreeNode
@@ -618,6 +612,7 @@ type TreeNode struct {
 }
 
 // --- Tree/Summary Helper Functions ---
+// (formatBytes, buildTree, printTreeRecursive, printSummaryTree remain the same)
 func formatBytes(b int64) string {
 	const unit = 1024
 	if b < unit {
@@ -635,7 +630,6 @@ func formatBytes(b int64) string {
 	}
 	return fmt.Sprintf("%.1f %ciB", val, unitPrefix)
 }
-
 func buildTree(files []FileInfo) *TreeNode {
 	root := &TreeNode{Name: ".", Children: make(map[string]*TreeNode)}
 	for i := range files {
@@ -647,15 +641,12 @@ func buildTree(files []FileInfo) *TreeNode {
 			if part == "" {
 				continue
 			}
-
 			isLastPart := (j == len(parts)-1)
-
 			childNode, exists := currentNode.Children[part]
 			if !exists {
 				childNode = &TreeNode{Name: part, Children: make(map[string]*TreeNode)}
 				currentNode.Children[part] = childNode
 			}
-
 			if isLastPart {
 				childNode.FileInfo = file
 			}
@@ -664,7 +655,6 @@ func buildTree(files []FileInfo) *TreeNode {
 	}
 	return root
 }
-
 func printTreeRecursive(writer io.Writer, node *TreeNode, indent string, isLast bool) {
 	fileInfoStr := ""
 	manualMarker := ""
@@ -674,44 +664,33 @@ func printTreeRecursive(writer io.Writer, node *TreeNode, indent string, isLast 
 			manualMarker = " [M]"
 		}
 	}
-
-	if node.Name == "." {
-		// Root placeholder node, handled by caller
+	if node.Name == "." { /* Handled by caller */
 	} else {
 		connector := "├── "
 		if isLast {
 			connector = "└── "
 		}
 		fmt.Fprintf(writer, "%s%s%s%s%s\n", indent, connector, node.Name, manualMarker, fileInfoStr)
-
 		if isLast {
 			indent += "    "
 		} else {
 			indent += "│   "
 		}
 	}
-
 	childNames := make([]string, 0, len(node.Children))
 	for name := range node.Children {
 		childNames = append(childNames, name)
 	}
 	sort.Strings(childNames)
-
 	for i, name := range childNames {
 		printTreeRecursive(writer, node.Children[name], indent, i == len(childNames)-1)
 	}
 }
-
 func printSummaryTree(
-	includedFiles []FileInfo,
-	emptyFiles []string,
-	errorFiles map[string]error,
-	totalSize int64,
-	targetDir string,
-	outputWriter io.Writer,
+	includedFiles []FileInfo, emptyFiles []string, errorFiles map[string]error,
+	totalSize int64, targetDir string, outputWriter io.Writer,
 ) {
 	fmt.Fprintln(outputWriter, "\n--- Summary ---")
-
 	if len(includedFiles) > 0 {
 		treeRootName := filepath.Base(targetDir)
 		if treeRootName == "." || treeRootName == string(filepath.Separator) {
@@ -721,15 +700,10 @@ func printSummaryTree(
 				treeRootName = targetDir
 			}
 		}
-
 		fmt.Fprintf(outputWriter, "Included %d files (%s total) from '%s':\n", len(includedFiles), formatBytes(totalSize), treeRootName)
-
-		sort.Slice(includedFiles, func(i, j int) bool {
-			return includedFiles[i].Path < includedFiles[j].Path
-		})
+		sort.Slice(includedFiles, func(i, j int) bool { return includedFiles[i].Path < includedFiles[j].Path })
 		fileTree := buildTree(includedFiles)
 		fmt.Fprintf(outputWriter, "%s/\n", treeRootName)
-
 		rootChildNames := make([]string, 0, len(fileTree.Children))
 		for name := range fileTree.Children {
 			rootChildNames = append(rootChildNames, name)
@@ -738,11 +712,9 @@ func printSummaryTree(
 		for i, name := range rootChildNames {
 			printTreeRecursive(outputWriter, fileTree.Children[name], "", i == len(rootChildNames)-1)
 		}
-
 	} else {
 		fmt.Fprintln(outputWriter, "No files included in the output.")
 	}
-
 	if len(emptyFiles) > 0 {
 		fmt.Fprintf(outputWriter, "\nEmpty files found (%d):\n", len(emptyFiles))
 		sort.Strings(emptyFiles)
@@ -750,7 +722,6 @@ func printSummaryTree(
 			fmt.Fprintf(outputWriter, "- %s\n", p)
 		}
 	}
-
 	if len(errorFiles) > 0 {
 		fmt.Fprintf(outputWriter, "\nErrors encountered (%d):\n", len(errorFiles))
 		errorPaths := make([]string, 0, len(errorFiles))
@@ -763,4 +734,17 @@ func printSummaryTree(
 		}
 	}
 	fmt.Fprintln(outputWriter, "---------------")
+}
+
+// Helper to get map keys for logging set contents
+func mapsKeys[M ~map[K]V, K comparable, V any](m M) []K {
+	r := make([]K, 0, len(m))
+	for k := range m {
+		r = append(r, k)
+	}
+	sort.Slice(r, func(i, j int) bool { // Sort for consistent log output
+		// Assuming K is string or comparable type convertible to string
+		return fmt.Sprint(r[i]) < fmt.Sprint(r[j])
+	})
+	return r
 }

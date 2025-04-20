@@ -1,5 +1,5 @@
 // main_test.go
-package main
+package main_test
 
 import (
 	"bytes"
