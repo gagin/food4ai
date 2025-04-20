@@ -16,7 +16,7 @@ import (
 	pflag "github.com/spf13/pflag"
 )
 
-const Version = 0.2.1" // major.minor.patch
+const Version = "0.2.2" // major.minor.patch
 
 // --- File Info Struct ---
 type FileInfo struct {

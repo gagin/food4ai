@@ -10,7 +10,7 @@ increment-version:
     git add main.go
 
 # Commit staged changes with dynamic message
-commit: increment-version
+commit:
     git add --update
     git commit -m "$(COMMIT_MESSAGE)"
 
