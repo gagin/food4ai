@@ -1,4 +1,3 @@
-// main.go
 package main
 
 import (
@@ -17,6 +16,8 @@ import (
 	pflag "github.com/spf13/pflag"
 )
 
+const Version = 0.2.1" // major.minor.patch
+
 // --- File Info Struct ---
 type FileInfo struct {
 	Path     string
@@ -34,6 +35,7 @@ var (
 	logLevelStr        string
 	outputFile         string
 	configFileFlag     string
+	versionFlag        bool // Added for -v/--version
 )
 
 func init() {
@@ -46,6 +48,7 @@ func init() {
 	pflag.StringVar(&logLevelStr, "loglevel", "info", "Set logging verbosity (debug, info, warning, error).")
 	pflag.StringVarP(&outputFile, "output", "o", "", "Output file path (writes code to file, summary to stdout).")
 	pflag.StringVarP(&configFileFlag, "config", "c", "", "Path to a custom configuration file (overrides default ~/.config/codecat/config.toml).")
+	pflag.BoolVarP(&versionFlag, "version", "v", false, "Print version and exit.") // Added for -v/--version
 
 	// Define custom usage message using pflag's Usage variable
 	pflag.Usage = func() {
@@ -77,6 +80,12 @@ func main() {
 	_ = time.Now()
 
 	pflag.Parse()
+
+	// Handle --version/-v flag
+	if versionFlag {
+		fmt.Printf("codecat version %s\n", Version)
+		os.Exit(0)
+	}
 
 	// --- Setup Logging (Always to Stderr) ---
 	var logLevel slog.Level

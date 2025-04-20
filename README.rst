@@ -31,7 +31,7 @@ Assuming you have Go installed and your GOPATH/GOBIN is set up:
     go build -o codecat .
 
 Move the resulting ``codecat`` executable to a directory in your system's PATH
-(e.g., ``/usr/local/bin`` or ``~/bin``) to run it from anywhere.
+(e.g., ``/usr/local/bin`` or ``~/.local/bin``) to run it from anywhere.
 
 Usage
 -----
@@ -201,3 +201,13 @@ Include specific file and all `.yaml` files from `conf` directory, sending code 
 Process only a specific manual file, sending code to `manual_only.txt`, summary to stdout:
 .. code-block:: bash
     codecat -f /path/to/important/file.py -o manual_only.txt
+
+
+Version History
+---------------
+- Apr 20, 2025: Renaming `food4ai` to `codecat` — short, clear, and reflects code concatenation for LLMs. Seems unused.
+
+To-Do and Known Problems
+------------------------
+- Follows `most specific` approach for .gitignore instead of standard `first-seen`
+- main_test fails
