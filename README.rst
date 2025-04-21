@@ -212,3 +212,5 @@ To-Do and Known Problems
 - Follows `most specific` approach for .gitignore instead of standard `first-seen`. Unclear where it's b/c of the library.
 - main_test fails
 - need to auto-update version number in readme as well
+- option whether to include empty in a list or same as other ones, and include in the tree, and include at all
+- option to include the tree
