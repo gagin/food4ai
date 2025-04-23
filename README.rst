@@ -6,6 +6,8 @@ A command-line tool to concatenate source code files into a single output,
 formatted for easy consumption by Large Language Models (LLMs) or other AI
 analysis tools.
 
+[![](https://tokei.rs/b1/github/XAMPPRocky/tokei)](https://github.com/XAMPPRocky/tokei).
+
 Purpose
 -------
 
