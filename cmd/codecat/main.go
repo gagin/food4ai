@@ -202,7 +202,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Generate Output
+	// --- Generate Output ---
 	concatenatedOutput, includedFiles, emptyFiles, errorFiles, totalSize, genErr := generateConcatenatedCode(
 		finalTargetDirectory,
 		finalExtensionsSet,
@@ -211,30 +211,43 @@ func main() {
 		finalUseGitignore,
 		headerText,
 		commentMarker,
-		finalNoScan, // Pass noScan flag
+		finalNoScan, // Pass the finalNoScan flag
 		// Pass future flags here
 	)
 
 	// --- Updated Error Handling ---
-	exitCode := 0 // Default success
-	if genErr != nil {
-		slog.Error("Error during file processing.", "error", genErr)
-		// Check if it's the specific directory not found error AND noScan was true
-		// In this case, we allow proceeding if manual files were processed.
-		isDirNotExistErr := errors.Is(genErr, fs.ErrNotExist) && strings.Contains(genErr.Error(), finalTargetDirectory)
+	exitCode := 0           // Default success
+	proceedToOutput := true // Assume we can print output unless critical error
 
-		if !(isDirNotExistErr && finalNoScan && len(manualFiles) > 0) {
-			// If it's NOT the special allowed error case, print and set exit code
+	if genErr != nil {
+		slog.Error("Error reported during file processing.", "error", genErr)
+
+		// Check if it's the specific directory not found/access error
+		isDirNotExistErr := errors.Is(genErr, fs.ErrNotExist) && strings.Contains(genErr.Error(), finalTargetDirectory)
+		isDirNotDirErr := strings.Contains(genErr.Error(), "is not a directory") // Check for this error too
+
+		// Should we stop completely? Only if scan was intended OR if it's an unexpected error type.
+		if !finalNoScan && (isDirNotExistErr || isDirNotDirErr) {
+			// Scan was intended, but directory was bad - main() already printed error, set exit code
+			slog.Warn("Scan skipped due to inaccessible target directory.")
+			exitCode = 1
+			proceedToOutput = false // Don't try to write potentially empty/incomplete output
+		} else if !(isDirNotExistErr || isDirNotDirErr) {
+			// If it's a DIFFERENT error (e.g., walk failed mid-way), print it and exit.
 			fmt.Fprintf(os.Stderr, "Error during processing: %v\n", genErr)
 			exitCode = 1
-		} else {
-			// Log that we are proceeding despite dir error because of --no-scan
+			proceedToOutput = false // Don't write potentially incomplete output
+		} else if finalNoScan && (isDirNotExistErr || isDirNotDirErr) {
+			// If --no-scan was used, directory error is acceptable, log warning but proceed
 			slog.Warn("Ignoring target directory access error due to --no-scan.", "error", genErr)
+			// proceedToOutput remains true
 		}
 	}
-	// Also set error code if file-specific errors occurred during processing
+	// Also mark for exit if file-specific errors occurred, but allow output
 	if len(errorFiles) > 0 {
-		exitCode = 1 // Mark for exit even if genErr was nil or ignored
+		if exitCode == 0 { // Don't override a critical exit code
+			exitCode = 1
+		}
 	}
 
 	// Determine Output Target and Summary Writer (No change needed)
@@ -258,19 +271,25 @@ func main() {
 		slog.Info("Writing concatenated code to stdout.")
 	}
 
-	// Write Concatenated Code (No change needed)
-	if concatenatedOutput != "" {
-		_, errWrite := io.WriteString(codeWriter, concatenatedOutput)
-		if errWrite != nil {
-			slog.Error("Failed to write concatenated code.", "error", errWrite)
-			fmt.Fprintf(os.Stderr, "Error writing output: %v\n", errWrite)
-			if outputFileHandle != nil {
-				_ = outputFileHandle.Close()
+	// Write Concatenated Code
+	// Only write if we determined it's okay to proceed
+	if proceedToOutput {
+		if concatenatedOutput != "" {
+			_, errWrite := io.WriteString(codeWriter, concatenatedOutput)
+			if errWrite != nil {
+				slog.Error("Failed to write concatenated code.", "error", errWrite)
+				fmt.Fprintf(os.Stderr, "Error writing output: %v\n", errWrite)
+				if outputFileHandle != nil {
+					_ = outputFileHandle.Close()
+				}
+				os.Exit(1) // Exit immediately on write error
 			}
-			os.Exit(1) // Exit immediately on write error
+		} else if genErr == nil && exitCode == 0 && len(includedFiles) == 0 && len(manualFiles) == 0 {
+			// Only log empty warning if no errors occurred and no files were processed/specified
+			slog.Warn("No content generated. Output is empty.")
 		}
-	} else if genErr == nil && exitCode == 0 && len(includedFiles) == 0 && len(manualFiles) == 0 {
-		slog.Warn("No content generated. Output is empty.")
+	} else {
+		slog.Warn("Skipping output writing due to processing errors.")
 	}
 
 	if outputFileHandle != nil {
