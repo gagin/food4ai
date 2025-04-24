@@ -2,26 +2,27 @@
 package main
 
 import (
-	"fmt"
+	// Keep
+	"fmt" // Keep
 	"log/slog"
 	"os"
-	"path/filepath"
-	"regexp"
+	"path/filepath" // Keep for .git exclude
+	// Keep for metadata append later
 	"strings"
 
 	gocodewalker "github.com/boyter/gocodewalker"
+	// No sabhiram import needed
 )
 
-// generateConcatenatedCode uses gocodewalker with hybrid filtering.
+// generateConcatenatedCode uses gocodewalker, configured by useGitignore bool.
 func generateConcatenatedCode(
 	dir string,
 	exts map[string]struct{},
 	manualFilePaths []string,
-	excludePatterns []string, // Combined list from config + flag
-	useGitignore bool,
+	excludePatterns []string,
+	useGitignore bool, // Back to boolean
 	header, marker string,
-	// Add future flags here later:
-	// gitignoreMode string,
+	// Future flags:
 	// includeFileList bool,
 	// includeEmptyFilesList bool,
 	// noScan bool,
@@ -116,8 +117,8 @@ func generateConcatenatedCode(
 		}
 	}
 
-	shouldScan := len(exts) > 0
 	// Add noScan check here later
+	shouldScan := len(exts) > 0
 
 	if shouldScan {
 		slog.Info("Starting file scan.", "directory", dir, "useGitignore", useGitignore)
@@ -138,15 +139,21 @@ func generateConcatenatedCode(
 			return
 		}
 
+		var walkErr error
+
+		// --- Always use gocodewalker ---
 		fileListQueue := make(chan *gocodewalker.File, 100)
 		fileWalker := gocodewalker.NewFileWalker(dir, fileListQueue)
 
-		fileWalker.IgnoreGitIgnore = !useGitignore
-		fileWalker.IgnoreIgnoreFile = !useGitignore
+		// Configure Ignores based on useGitignore flag
+		ignoreIgnores := !useGitignore
+		fileWalker.IgnoreGitIgnore = ignoreIgnores
+		fileWalker.IgnoreIgnoreFile = ignoreIgnores
 		slog.Debug("Configured walker ignore flags",
 			"IgnoreGitIgnore", fileWalker.IgnoreGitIgnore,
 			"IgnoreIgnoreFile", fileWalker.IgnoreIgnoreFile)
 
+		// Configure Extensions
 		allowedExtList := []string{}
 		for extWithDot := range exts {
 			allowedExtList = append(allowedExtList, strings.TrimPrefix(extWithDot, "."))
@@ -154,52 +161,28 @@ func generateConcatenatedCode(
 		fileWalker.AllowListExtensions = allowedExtList
 		slog.Debug("Set walker AllowListExtensions", "extensions", allowedExtList)
 
-		var excludeDirRegexes []*regexp.Regexp
-		var excludeFileRegexes []*regexp.Regexp
+		// Configure Excludes (Manual filtering approach)
 		manualPathExcludes := []string{}
 		manualDirExcludes := []string{}
 
-		if useGitignore {
-			if re, err := regexp.Compile(`^\.git$`); err == nil {
-				excludeDirRegexes = append(excludeDirRegexes, re)
-				excludeFileRegexes = append(excludeFileRegexes, re)
-			}
+		if useGitignore { // Add .git exclude only if respecting gitignores
+			manualPathExcludes = append(manualPathExcludes, ".git/*")
+			manualDirExcludes = append(manualDirExcludes, ".git")
 		}
 
 		for _, pattern := range excludePatterns {
-			isFilenamePattern := !strings.Contains(pattern, "/") &&
-				strings.ContainsAny(pattern, "*?")
-			isDirPattern := strings.HasSuffix(pattern, "/")
-
-			if isDirPattern {
-				baseName := strings.TrimSuffix(pattern, "/")
-				manualDirExcludes = append(manualDirExcludes, baseName)
-				regexStr := "^" + regexp.QuoteMeta(baseName) + "$"
-				if re, err := regexp.Compile(regexStr); err == nil {
-					excludeDirRegexes = append(excludeDirRegexes, re)
-				} else {
-					slog.Warn("Failed to compile dir name to regex",
-						"dir", baseName, "error", err)
-				}
-			} else if isFilenamePattern {
-				regexStr := globToRegex(pattern) // Use helper
-				if re, err := regexp.Compile(regexStr); err == nil {
-					excludeFileRegexes = append(excludeFileRegexes, re)
-				} else {
-					slog.Warn("Failed to compile glob to filename regex",
-						"glob", pattern, "regex", regexStr, "error", err)
-					manualPathExcludes = append(manualPathExcludes, pattern)
-				}
+			if strings.HasSuffix(pattern, "/") {
+				manualDirExcludes = append(manualDirExcludes, strings.TrimSuffix(pattern, "/"))
 			} else {
 				manualPathExcludes = append(manualPathExcludes, pattern)
 			}
 		}
-		fileWalker.ExcludeDirectoryRegex = excludeDirRegexes
-		fileWalker.ExcludeFilenameRegex = excludeFileRegexes
-		slog.Debug("Set walker ExcludeDirectoryRegex", "count", len(excludeDirRegexes))
-		slog.Debug("Set walker ExcludeFilenameRegex", "count", len(excludeFileRegexes))
-		slog.Debug("Manual path excludes", "patterns", manualPathExcludes)
-		slog.Debug("Manual directory excludes", "patterns", manualDirExcludes)
+		// Leave walker exclude fields empty
+		// fileWalker.LocationExcludePattern = nil
+		// fileWalker.ExcludeDirectoryRegex = nil
+		// fileWalker.ExcludeFilenameRegex = nil
+		slog.Debug("Manual path excludes (filepath.Match)", "patterns", manualPathExcludes)
+		slog.Debug("Manual directory excludes (basename check)", "patterns", manualDirExcludes)
 
 		var firstWalkError error
 		walkerErrorHandler := func(e error) bool {
@@ -211,7 +194,7 @@ func generateConcatenatedCode(
 		}
 		fileWalker.SetErrorHandler(walkerErrorHandler)
 
-		walkErr := fileWalker.Start()
+		walkErr = fileWalker.Start()
 		if walkErr != nil {
 			slog.Error("Failed to start file walk.", "directory", dir, "error", walkErr)
 			returnedErr = walkErr
@@ -254,7 +237,7 @@ func generateConcatenatedCode(
 				if isDir {
 					for _, dirPatternBase := range manualDirExcludes {
 						if fileInfo.Name() == dirPatternBase {
-							slog.Debug("Walk: Skipping directory (manual dir/).",
+							slog.Debug("Walk: Skipping directory (manual dir/ check).",
 								"path", relPath, "pattern", dirPatternBase+"/")
 							excluded = true
 							break
@@ -263,7 +246,7 @@ func generateConcatenatedCode(
 				} else {
 					for _, dirPatternBase := range manualDirExcludes {
 						if strings.HasPrefix(relPath, dirPatternBase+"/") {
-							slog.Debug("Walk: Skipping file in excluded dir (manual dir/).",
+							slog.Debug("Walk: Skipping file in excluded dir (manual dir/ check).",
 								"path", relPath, "pattern", dirPatternBase+"/")
 							excluded = true
 							break
@@ -332,12 +315,13 @@ func generateConcatenatedCode(
 				"directory", dir, "first_error", finalWalkError)
 		} else if finalWalkError != nil {
 			slog.Error("Walk failed.", "directory", dir, "error", finalWalkError)
-		} else {
-			slog.Info("File scan completed.")
 		}
 
 		if returnedErr == nil && finalWalkError != nil {
 			returnedErr = fmt.Errorf("file walk operation failed: %w", finalWalkError)
+		}
+		if returnedErr == nil {
+			slog.Info("File scan completed.")
 		}
 
 	} // end if shouldScan

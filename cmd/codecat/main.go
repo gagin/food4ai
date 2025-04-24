@@ -10,42 +10,47 @@ import (
 	"time"
 
 	pflag "github.com/spf13/pflag"
-	// Other imports might be needed depending on final logic
 )
 
-const Version = "0.2.2" // Keep original version for now
+const Version = "0.3.0" // Or next appropriate version
 
-// --- Global Variables for Flags (Original Set) ---
 var (
 	targetDirFlagValue string
 	extensions         []string
 	manualFiles        []string
 	excludePatterns    []string
-	noGitignore        bool // Keep original flag for now
+	noGitignore        bool // Reverted to this flag
 	logLevelStr        string
 	outputFile         string
 	configFileFlag     string
 	versionFlag        bool
+	noScanFlag         bool // Keep for future implementation
 )
 
 func init() {
-	// Define command-line flags using pflag (Original Set)
-	pflag.StringVarP(&targetDirFlagValue, "directory", "d", ".", "Target directory to scan.")
-	pflag.StringSliceVarP(&extensions, "extensions", "e", []string{}, "Comma-separated file extensions (overrides config).")
-	pflag.StringSliceVarP(&manualFiles, "files", "f", []string{}, "Comma-separated specific file paths.")
-	pflag.StringSliceVarP(&excludePatterns, "exclude", "x", []string{}, "Comma-separated glob patterns to exclude (adds to config).")
-	pflag.BoolVar(&noGitignore, "no-gitignore", false, "Disable .gitignore processing.") // Will be replaced later
-	pflag.StringVar(&logLevelStr, "loglevel", "info", "Set logging verbosity (debug, info, warn, error).")
+	pflag.StringVarP(&targetDirFlagValue, "directory", "d", ".", "Target directory.")
+	pflag.StringSliceVarP(&extensions, "extensions", "e", []string{}, "Extensions (overrides config).")
+	pflag.StringSliceVarP(&manualFiles, "files", "f", []string{}, "Manual files.")
+	pflag.StringSliceVarP(&excludePatterns, "exclude", "x", []string{}, "Exclude patterns (adds to config).")
+	pflag.BoolVar(&noGitignore, "no-gitignore", false, "Disable .gitignore processing.") // Reverted
+	pflag.StringVar(&logLevelStr, "loglevel", "info", "Log level (debug, info, warn, error).")
 	pflag.StringVarP(&outputFile, "output", "o", "", "Output file path.")
-	pflag.StringVarP(&configFileFlag, "config", "c", "", "Path to a custom configuration file.")
-	pflag.BoolVarP(&versionFlag, "version", "v", false, "Print version and exit.")
+	pflag.StringVarP(&configFileFlag, "config", "c", "", "Custom config file.")
+	pflag.BoolVarP(&versionFlag, "version", "v", false, "Print version.")
+	pflag.BoolVarP(&noScanFlag, "no-scan", "n", false, "Skip scan, use -f files only.")
 
-	// Define original usage message
 	pflag.Usage = func() {
 		fmt.Fprintf(os.Stderr, `Usage: %s [target_directory]
    or: %s [flags]
 
 Concatenate source code files.
+
+Mode 1: Positional argument [target_directory]. Uses config settings. Conflicts with most flags.
+Mode 2: Flags only. Use -d for directory, etc.
+
+Output:
+  Default: Code to stdout, Summary/Logs to stderr.
+  With -o <file>: Code to <file>, Summary/Logs to stdout.
 
 Flags:
 `, os.Args[0], os.Args[0])
@@ -53,7 +58,6 @@ Flags:
 	}
 }
 
-// --- Main Execution ---
 func main() {
 	_ = time.Now()
 	pflag.Parse()
@@ -63,7 +67,6 @@ func main() {
 		os.Exit(0)
 	}
 
-	// Setup Logging
 	var logLevel slog.Level
 	if err := logLevel.UnmarshalText([]byte(logLevelStr)); err != nil {
 		fmt.Fprintf(os.Stderr, "Invalid log level %q, defaulting to 'info'.\n", logLevelStr)
@@ -73,14 +76,12 @@ func main() {
 	handler := slog.NewTextHandler(os.Stderr, logOpts)
 	slog.SetDefault(slog.New(handler))
 
-	// Load Configuration (Function defined in config.go)
 	appConfig, loadErr := loadConfig(configFileFlag)
 	if loadErr != nil {
 		slog.Error("Failed to load configuration, using defaults.", "error", loadErr)
-		appConfig = defaultConfig // Defined in config.go
+		appConfig = defaultConfig
 	}
 
-	// Argument Mode Validation
 	positionalArgs := pflag.Args()
 	finalTargetDirectory := ""
 	var conflictingFlagSet bool = false
@@ -95,7 +96,7 @@ func main() {
 		}
 	})
 	if len(positionalArgs) > 1 {
-		fmt.Fprintf(os.Stderr, "Refusing execution: Multiple positional arguments provided: %v.\n", positionalArgs)
+		fmt.Fprintf(os.Stderr, "Refusing execution: Multiple positional arguments: %v.\n", positionalArgs)
 		os.Exit(1)
 	} else if len(positionalArgs) == 1 {
 		if conflictingFlagSet {
@@ -112,7 +113,6 @@ func main() {
 		slog.Debug("Using flags mode. Target directory from -d or default.", "path", finalTargetDirectory)
 	}
 
-	// Validate Final Target Directory
 	absTargetDir, err := filepath.Abs(finalTargetDirectory)
 	if err != nil {
 		slog.Error("Could not determine absolute path.", "path", finalTargetDirectory, "error", err)
@@ -121,48 +121,37 @@ func main() {
 	}
 	finalTargetDirectory = absTargetDir
 
-	// Initial Stat Check for early user feedback
 	dirInfo, err := os.Stat(finalTargetDirectory)
 	if err != nil {
+		logMsg := "Error accessing target directory."
+		errMsg := fmt.Sprintf("Error accessing target directory '%s': %v\n", finalTargetDirectory, err)
 		if os.IsNotExist(err) {
-			fmt.Fprintf(os.Stderr, "Error: Target directory '%s' not found.\n", finalTargetDirectory)
-		} else {
-			fmt.Fprintf(os.Stderr, "Error accessing target directory '%s': %v\n", finalTargetDirectory, err)
+			logMsg = "Target directory does not exist."
+			errMsg = fmt.Sprintf("Error: Target directory '%s' not found.\n", finalTargetDirectory)
 		}
+		slog.Error(logMsg, "path", finalTargetDirectory, "error", err)
+		fmt.Fprint(os.Stderr, errMsg)
 		os.Exit(1)
 	}
 	if !dirInfo.IsDir() {
+		slog.Error("Specified target path is not a directory.", "path", finalTargetDirectory)
 		fmt.Fprintf(os.Stderr, "Error: Specified target path '%s' is not a directory.\n", finalTargetDirectory)
 		os.Exit(1)
 	}
 
-	// Determine final settings
-	// Ensure pointers from config have defaults if necessary (using appConfig)
-	commentMarker := ""
-	if appConfig.CommentMarker != nil {
-		commentMarker = *appConfig.CommentMarker
-	} else {
-		commentMarker = *defaultConfig.CommentMarker
-	}
-	headerText := ""
-	if appConfig.HeaderText != nil {
-		headerText = *appConfig.HeaderText
-	} else {
-		headerText = *defaultConfig.HeaderText
-	}
-	finalUseGitignore := false // Default to false if nil
-	if appConfig.UseGitignore != nil {
-		finalUseGitignore = *appConfig.UseGitignore
-	} else {
-		finalUseGitignore = *defaultConfig.UseGitignore
-	}
-	// Apply command-line override
+	commentMarker := *appConfig.CommentMarker
+	headerText := *appConfig.HeaderText
+	finalNoScan := noScanFlag // Keep for future implementation
+	_ = finalNoScan           // TODO: Remove this blank assignment when noScan logic is implemented
+
+	finalUseGitignore := *appConfig.UseGitignore
 	if pflag.CommandLine.Changed("no-gitignore") {
 		finalUseGitignore = !noGitignore
+		slog.Debug("Using gitignore setting from command line flag.", "use_gitignore", finalUseGitignore)
+	} else {
+		slog.Debug("Using gitignore setting from config/default.", "use_gitignore", finalUseGitignore)
 	}
-	slog.Debug("Final useGitignore setting", "value", finalUseGitignore)
 
-	// Determine Extensions (Flag overrides Config)
 	finalExtensionsList := appConfig.IncludeExtensions
 	if pflag.CommandLine.Changed("extensions") {
 		slog.Debug("Using extensions from command line flag (overrides config).", "extensions", extensions)
@@ -170,10 +159,9 @@ func main() {
 	} else {
 		slog.Debug("Using extensions from config/default.", "extensions", appConfig.IncludeExtensions)
 	}
-	finalExtensionsSet := processExtensions(finalExtensionsList)                         // Defined in helpers.go
-	slog.Debug("Final extension set prepared", "set_keys", mapsKeys(finalExtensionsSet)) // Defined in helpers.go
+	finalExtensionsSet := processExtensions(finalExtensionsList)
+	slog.Debug("Final extension set prepared", "set_keys", mapsKeys(finalExtensionsSet))
 
-	// Determine Exclude Patterns (Flag ADDS to Config)
 	finalExcludePatternsList := appConfig.ExcludePatterns
 	if finalExcludePatternsList == nil {
 		finalExcludePatternsList = []string{}
@@ -186,39 +174,31 @@ func main() {
 	}
 	slog.Debug("Final combined exclude patterns", "patterns", finalExcludePatternsList)
 
-	// Input Validation
 	if len(finalExtensionsSet) == 0 && len(manualFiles) == 0 {
 		slog.Error("Processing criteria missing. No extensions or manual files.")
-		fmt.Fprintln(os.Stderr, "Error: No file extensions specified (use -e or config) and no manual files given (-f).")
+		fmt.Fprintln(os.Stderr, "Error: No file extensions specified and no manual files given.")
 		os.Exit(1)
 	}
 
-	// --- Generate Output (Call function defined in walk.go) ---
 	concatenatedOutput, includedFiles, emptyFiles, errorFiles, totalSize, genErr := generateConcatenatedCode(
 		finalTargetDirectory,
 		finalExtensionsSet,
 		manualFiles,
 		finalExcludePatternsList,
-		finalUseGitignore,
+		finalUseGitignore, // Pass bool
 		headerText,
 		commentMarker,
-		// Add future flags here:
-		// "recursive", // example mode
-		// false, // includeFileList
-		// false, // includeEmptyFilesList
-		// false, // noScan
+		// Pass future flags here
 	)
 
-	// Handle error from generation
 	if genErr != nil {
 		slog.Error("Error during file processing.", "error", genErr)
-		if !(os.IsNotExist(genErr)) { // Avoid duplicate message if main already checked
+		if !(os.IsNotExist(genErr)) {
 			fmt.Fprintf(os.Stderr, "Error during processing: %v\n", genErr)
 		}
 		os.Exit(1)
 	}
 
-	// Determine Output Target and Summary Writer
 	var codeWriter io.Writer
 	var summaryWriter io.Writer
 	var outputFileHandle *os.File
@@ -239,7 +219,6 @@ func main() {
 		slog.Info("Writing concatenated code to stdout.")
 	}
 
-	// Write Concatenated Code
 	if concatenatedOutput != "" {
 		_, errWrite := io.WriteString(codeWriter, concatenatedOutput)
 		if errWrite != nil {
@@ -261,7 +240,6 @@ func main() {
 		}
 	}
 
-	// Print Summary (Function defined in summary.go)
 	printSummaryTree(includedFiles, emptyFiles, errorFiles, totalSize, finalTargetDirectory, summaryWriter)
 
 	slog.Debug("Execution finished.")

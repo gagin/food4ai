@@ -2,7 +2,7 @@
 package main
 
 import (
-	"fmt"
+	"fmt" // Ensure regexp is imported
 	"sort"
 	"strings"
 )
@@ -64,23 +64,20 @@ func formatBytes(b int64) string {
 func globToRegex(glob string) string {
 	var regex strings.Builder
 	regex.WriteString("^") // Anchor start
-
 	for i := 0; i < len(glob); i++ {
 		char := glob[i]
 		switch char {
 		case '*':
-			regex.WriteString(".*") // Match zero or more characters
+			regex.WriteString(".*")
 		case '?':
-			regex.WriteString(".") // Match any single character
+			regex.WriteString(".")
 		case '.', '[', ']', '{', '}', '(', ')', '+', '^', '$', '|', '\\':
-			// Escape regex metacharacters
 			regex.WriteByte('\\')
 			regex.WriteByte(char)
 		default:
-			regex.WriteByte(char) // Append literal character
+			regex.WriteByte(char)
 		}
 	}
-
 	regex.WriteString("$") // Anchor end
 	return regex.String()
 }

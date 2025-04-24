@@ -12,13 +12,15 @@ import (
 	"github.com/BurntSushi/toml"
 )
 
-// Config struct using original UseGitignore bool for now
 type Config struct {
 	IncludeExtensions []string `toml:"include_extensions"`
 	ExcludePatterns   []string `toml:"exclude_patterns"`
 	CommentMarker     *string  `toml:"comment_marker"`
 	HeaderText        *string  `toml:"header_text"`
-	UseGitignore      *bool    `toml:"use_gitignore"` // Keep until flags are updated
+	UseGitignore      *bool    `toml:"use_gitignore"`
+	// Add future fields here
+	// IncludeFileListInOutput bool   `toml:"include_file_list_in_output"`
+	// IncludeEmptyFilesInOutput bool   `toml:"include_empty_files_in_output"`
 }
 
 var defaultConfig = Config{
@@ -26,12 +28,11 @@ var defaultConfig = Config{
 	ExcludePatterns:   []string{},
 	CommentMarker:     func(s string) *string { return &s }("---"),
 	HeaderText:        func(s string) *string { return &s }("Codebase for analysis:"),
-	UseGitignore:      func(b bool) *bool { return &b }(true), // Default to using gitignore
+	UseGitignore:      func(b bool) *bool { return &b }(true),
 }
 
-// loadConfig finds and loads the configuration
 func loadConfig(customConfigPath string) (Config, error) {
-	_ = time.Now() // Keep timestamp context
+	_ = time.Now()
 
 	cfg := defaultConfig
 	configFile := ""
@@ -49,7 +50,7 @@ func loadConfig(customConfigPath string) (Config, error) {
 	if determinationErr == nil {
 		if isCustomPath {
 			var err error
-			slog.Debug("DEBUG: Resolving custom config path relative to CWD", "custom_path_arg", customConfigPath, "cwd", cwd)
+			slog.Debug("DEBUG: Resolving custom config path", "custom_path_arg", customConfigPath, "cwd", cwd)
 			configFile, err = filepath.Abs(customConfigPath)
 			if err != nil {
 				slog.Error("Could not determine absolute path for custom config file.", "path", customConfigPath, "error", err)
@@ -117,18 +118,17 @@ func loadConfig(customConfigPath string) (Config, error) {
 
 	cfg = loadedCfg
 
-	// Ensure pointer fields have defaults if nil after decoding
 	if cfg.CommentMarker == nil {
 		cfg.CommentMarker = defaultConfig.CommentMarker
-		slog.Debug("Config key 'comment_marker' not set, using default.", "value", *cfg.CommentMarker)
+		slog.Debug("Config key 'comment_marker' not set.", "default", *cfg.CommentMarker)
 	}
 	if cfg.HeaderText == nil {
 		cfg.HeaderText = defaultConfig.HeaderText
-		slog.Debug("Config key 'header_text' not set, using default.", "value", *cfg.HeaderText)
+		slog.Debug("Config key 'header_text' not set.", "default", *cfg.HeaderText)
 	}
-	if cfg.UseGitignore == nil { // Keep this check for now
+	if cfg.UseGitignore == nil {
 		cfg.UseGitignore = defaultConfig.UseGitignore
-		slog.Debug("Config key 'use_gitignore' not set, using default.", "value", *cfg.UseGitignore)
+		slog.Debug("Config key 'use_gitignore' not set.", "default", *cfg.UseGitignore)
 	}
 
 	slog.Debug("Configuration loaded successfully.",
@@ -136,8 +136,8 @@ func loadConfig(customConfigPath string) (Config, error) {
 		"header", *cfg.HeaderText,
 		"include_extensions", cfg.IncludeExtensions,
 		"exclude_patterns", cfg.ExcludePatterns,
-		"use_gitignore", *cfg.UseGitignore, // Log the loaded value
 		"comment_marker", *cfg.CommentMarker,
+		"use_gitignore", *cfg.UseGitignore,
 	)
 
 	return cfg, nil
