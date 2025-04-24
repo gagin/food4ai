@@ -1,0 +1,247 @@
+// CodeCat Use Cases
+// Project: CodeCat
+// Description: Concatenate development files into a single file for LLM context.
+// Date: April 23, 2025
+// Author: xAI (via Grok 3)
+
+[
+    // Use Case 1: Printout Code from Current Directory with Default Settings
+    {
+      "id": "UC-001",
+      "actors": ["Developer", "CodeCat"],
+      "description": "Run CodeCat in the current directory with default settings, capturing output via shell redirect. Utility info goes to stderr.",
+      "preconditions": [
+        "Current directory contains development files (e.g., .py, .js).",
+        "Config file (~/.config/codecat/config.toml) exists with default extensions."
+      ],
+      "postconditions": "A single file containing concatenated code is created via redirect.",
+      "priority": "High",
+      "frequency": "Daily",
+      "status": "Draft",
+      "basic_flow": [
+        "Navigate to project directory.",
+        "Run `codecat -e jsonc > output.txt`.",
+        "Read default config (extensions: .py, .js, .ts, .java).",
+        "Scan current directory, including matching extensions and .jsonc.",
+        "Output concatenated contents to stdout, redirected to output.txt.",
+        "Print summary to stderr with tree, skipped files, and total size."
+      ],
+      "core_scenario": "Quickly gather code files for LLM context.",
+      "feature_specific_scenario": "Default mode with -e jsonc, stderr for utility info.",
+      "needs": [
+        "Minimal-command concatenation.",
+        "Support for project-specific extensions (e.g., JSONC).",
+        "Clean stdout for redirection."
+      ],
+      "choices_compromises_assumptions": {
+        "choice": "Default mode assumes current directory and config extensions.",
+        "compromise": "Requires shell redirect for output.",
+        "assumption": "Config exists; stderr is appropriate for summary."
+      },
+      "solution": {
+        "command": "codecat -e jsonc > output.txt",
+        "summary_stderr": "📁 Project Root\n├── src/main.py (2 KB)\n├── src/utils.js (1 KB)\n├── config.jsonc (0.5 KB)\n└── total: 3.5 KB\nSkipped: node_modules/, .env\nEmpty: none",
+        "output": "output.txt contains main.py, utils.js, config.jsonc."
+      },
+      "mermaid_flow": "graph TD;\n  A[Developer] --> B[Run `codecat -e jsonc > output.txt`];\n  B --> C[Scan directory];\n  C --> D[Output to stdout];\n  D --> E[Redirect to output.txt];\n  C --> F[Summary to stderr];"
+    },
+    // Use Case 2: Use Gitignore and Config Exclusions
+    {
+      "id": "UC-002",
+      "actors": ["Developer", "CodeCat"],
+      "description": "Respect .gitignore and exclude sample/doc directories via config, concatenate files for LLM context.",
+      "preconditions": [
+        "Current directory has development files and .gitignore.",
+        "Config file includes exclusions for docs/ and samples/."
+      ],
+      "postconditions": "A single file excluding ignored/configured directories is output.",
+      "priority": "Medium",
+      "frequency": "Weekly",
+      "status": "Draft",
+      "basic_flow": [
+        "Edit config.toml: extensions = ['.py', '.js', '.ts', '.java'], exclude = ['docs/', 'samples/'].",
+        "Navigate to project directory.",
+        "Run `codecat -d . --gitignore > output.txt`.",
+        "Read config and .gitignore (e.g., node_modules/, .env).",
+        "Scan directory, excluding docs/, samples/, and .gitignore patterns.",
+        "Output concatenated contents to stdout, redirected to output.txt.",
+        "Print summary to stderr with tree, skipped files, and total size."
+      ],
+      "core_scenario": "Concatenate code excluding sensitive/temp and doc/sample files.",
+      "feature_specific_scenario": "Uses .gitignore and config exclusions, requires -d.",
+      "needs": [
+        "Avoid sensitive (e.g., .env) and temporary files.",
+        "Exclude irrelevant doc/sample directories."
+      ],
+      "choices_compromises_assumptions": {
+        "choice": ".gitignore reuses project conventions.",
+        "compromise": "Explicit -d required with flags.",
+        "assumption": ".gitignore and config are correctly formatted."
+      },
+      "solution": {
+        "command": "codecat -d . --gitignore > output.txt",
+        "config": "extensions = ['.py', '.js', '.ts', '.java']\nexclude = ['docs/', 'samples/']",
+        "summary_stderr": "📁 Project Root\n├── src/main.py (2 KB)\n├── src/utils.js (1 KB)\n└── total: 3 KB\nSkipped: node_modules/, .env, docs/, samples/\nEmpty: none",
+        "output": "output.txt contains main.py and utils.js."
+      },
+      "mermaid_flow": "graph TD;\n  A[Developer] --> B[Edit config.toml];\n  A --> C[Run `codecat -d . --gitignore > output.txt`];\n  C --> D[Read .gitignore and config];\n  D --> E[Scan directory, exclude docs/, samples/];\n  E --> F[Output to stdout];\n  F --> G[Redirect to output.txt];\n  E --> H[Summary to stderr];"
+    },
+    // Use Case 3: Exclude README for Current Printout
+    {
+      "id": "UC-003",
+      "actors": ["Developer", "CodeCat"],
+      "description": "Concatenate files but exclude README.md via -x to focus LLM context on code.",
+      "preconditions": [
+        "Current directory has development files and README.md.",
+        "Config file exists with default extensions."
+      ],
+      "postconditions": "A single file excluding README.md is output.",
+      "priority": "Medium",
+      "frequency": "Occasional",
+      "status": "Draft",
+      "basic_flow": [
+        "Navigate to project directory.",
+        "Run `codecat -d . -x README.md > output.txt`.",
+        "Read default config (extensions: .py, .js, .ts, .java).",
+        "Scan directory, excluding README.md.",
+        "Output concatenated contents to stdout, redirected to output.txt.",
+        "Print summary to stderr with tree, skipped files, and total size."
+      ],
+      "core_scenario": "Provide code to LLM, excluding documentation.",
+      "feature_specific_scenario": "Ad-hoc exclusion via -x.",
+      "needs": [
+        "Focus LLM on code, not documentation.",
+        "Flexible, one-off exclusion."
+      ],
+      "choices_compromises_assumptions": {
+        "choice": "-x allows quick exclusions.",
+        "compromise": "Explicit -d required with flags.",
+        "assumption": "README.md is the primary doc file."
+      },
+      "solution": {
+        "command": "codecat -d . -x README.md > output.txt",
+        "summary_stderr": "📁 Project Root\n├── src/main.py (2 KB)\n├── src/utils.js (1 KB)\n└── total: 3 KB\nSkipped: README.md\nEmpty: none",
+        "output": "output.txt contains main.py and utils.js."
+      },
+      "mermaid_flow": "graph TD;\n  A[Developer] --> B[Run `codecat -d . -x README.md > output.txt`];\n  B --> C[Scan directory, exclude README.md];\n  C --> D[Output to stdout];\n  D --> E[Redirect to output.txt];\n  C --> F[Summary to stderr];"
+    },
+    // Use Case 4: Exclude Tests Directory for Fresh Unit Tests
+    {
+      "id": "UC-004",
+      "actors": ["Developer", "CodeCat"],
+      "description": "Concatenate files but exclude tests/ directory to provide code for LLM to generate fresh unit tests.",
+      "preconditions": [
+        "Current directory has development files and tests/ directory.",
+        "Config file exists with default extensions."
+      ],
+      "postconditions": "A single file excluding tests/ is output.",
+      "priority": "Medium",
+      "frequency": "Occasional",
+      "status": "Draft",
+      "basic_flow": [
+        "Navigate to project directory.",
+        "Run `codecat -d . -x tests/ > output.txt`.",
+        "Read default config (extensions: .py, .js, .ts, .java).",
+        "Scan directory, excluding tests/.",
+        "Output concatenated contents to stdout, redirected to output.txt.",
+        "Print summary to stderr with tree, skipped files, and total size."
+      ],
+      "core_scenario": "Provide code without tests for LLM to generate new tests.",
+      "feature_specific_scenario": "Directory exclusion with -x tests/.",
+      "needs": [
+        "Exclude existing tests for fresh test generation.",
+        "Support directory-level exclusions."
+      ],
+      "choices_compromises_assumptions": {
+        "choice": "Trailing slash (tests/) indicates directory exclusion.",
+        "compromise": "Explicit -d required with flags.",
+        "assumption": "tests/ is the standard test directory."
+      },
+      "solution": {
+        "command": "codecat -d . -x tests/ > output.txt",
+        "summary_stderr": "📁 Project Root\n├── src/main.py (2 KB)\n├── src/utils.js (1 KB)\n└── total: 3 KB\nSkipped: tests/\nEmpty: none",
+        "output": "output.txt contains main.py and utils.js."
+      },
+      "mermaid_flow": "graph TD;\n  A[Developer] --> B[Run `codecat -d . -x tests/ > output.txt`];\n  B --> C[Scan directory, exclude tests/];\n  C --> D[Output to stdout];\n  D --> E[Redirect to output.txt];\n  C --> F[Summary to stderr];"
+    },
+    // Use Case 5: Use -o to Specify Output File
+    {
+      "id": "UC-005",
+      "actors": ["Developer", "CodeCat"],
+      "description": "Concatenate files with -o to specify output file, printing utility info to stdout.",
+      "preconditions": [
+        "Current directory has development files.",
+        "Config file exists with default extensions."
+      ],
+      "postconditions": "A single file is written to the specified output file.",
+      "priority": "Medium",
+      "frequency": "Weekly",
+      "status": "Draft",
+      "basic_flow": [
+        "Navigate to project directory.",
+        "Run `codecat -d . -o output.txt`.",
+        "Read default config (extensions: .py, .js, .ts, .java).",
+        "Scan directory, including matching extensions.",
+        "Write concatenated contents to output.txt.",
+        "Print summary to stdout with tree, skipped files, and total size."
+      ],
+      "core_scenario": "Save concatenated code to a file and see summary in terminal.",
+      "feature_specific_scenario": "Uses -o, with stdout for utility info.",
+      "needs": [
+        "Save output without redirection.",
+        "View summary in terminal."
+      ],
+      "choices_compromises_assumptions": {
+        "choice": "-o simplifies output; stdout for summary.",
+        "compromise": "Explicit -d required with flags.",
+        "assumption": "Stdout expected for run info with -o."
+      },
+      "solution": {
+        "command": "codecat -d . -o output.txt",
+        "summary_stdout": "📁 Project Root\n├── src/main.py (2 KB)\n├── src/utils.js (1 KB)\n└── total: 3 KB\nSkipped: none\nEmpty: none",
+        "output": "output.txt contains main.py and utils.js."
+      },
+      "mermaid_flow": "graph TD;\n  A[Developer] --> B[Run `codecat -d . -o output.txt`];\n  B --> C[Scan directory];\n  C --> D[Write to output.txt];\n  C --> E[Summary to stdout];"
+    },
+    // Use Case 6: Pipe Output to LLM Command (Future Feature)
+    {
+      "id": "UC-006",
+      "actors": ["Developer", "CodeCat", "LLM Command"],
+      "description": "Concatenate files and pipe output to llm command for seamless LLM integration.",
+      "preconditions": [
+        "Current directory has development files.",
+        "Config file exists with default extensions.",
+        "llm command is installed and configured."
+      ],
+      "postconditions": "Concatenated code is processed by llm command.",
+      "priority": "Low (Future Feature)",
+      "frequency": "TBD",
+      "status": "Draft",
+      "basic_flow": [
+        "Navigate to project directory.",
+        "Run `codecat | llm`.",
+        "Read default config (extensions: .py, .js, .ts, .java).",
+        "Scan current directory, including matching extensions.",
+        "Output concatenated contents to stdout, piped to llm.",
+        "Print summary to stderr with tree, skipped files, and total size.",
+        "llm command processes input and produces output."
+      ],
+      "core_scenario": "Streamline workflow by piping to llm command.",
+      "feature_specific_scenario": "Piping support, stderr for utility info.",
+      "needs": [
+        "Eliminate intermediate files.",
+        "Maintain default mode compatibility."
+      ],
+      "choices_compromises_assumptions": {
+        "choice": "Piping uses stdout, consistent with default mode.",
+        "compromise": "Requires llm to handle piped input.",
+        "assumption": "llm is a standard tool."
+      },
+      "solution": {
+        "command": "codecat | llm",
+        "summary_stderr": "📁 Project Root\n├── src/main.py (2 KB)\n├── src/utils.js (1 KB)\n└── total: 3 KB\nSkipped: none\nEmpty: none",
+        "output": "Piped to llm."
+      },
+      "mermaid_flow": "graph TD;\n  A[Developer] --> B[Run `codecat | llm`];\n  B --> C[Scan directory];\n  C --> D[Output to stdout];\n  D --> E[Pipe to llm];\n  C --> F[Summary to stderr];"
+    }
+  ]
