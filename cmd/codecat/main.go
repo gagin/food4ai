@@ -2,29 +2,32 @@
 package main
 
 import (
+	"errors" // Import errors for IsNotExist check
 	"fmt"
 	"io"
+	"io/fs" // Import fs for ErrNotExist check
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	pflag "github.com/spf13/pflag"
 )
 
-const Version = "0.3.0" // Or next appropriate version
+const Version = "0.3.0"
 
 var (
 	targetDirFlagValue string
 	extensions         []string
 	manualFiles        []string
 	excludePatterns    []string
-	noGitignore        bool // Reverted to this flag
+	noGitignore        bool
 	logLevelStr        string
 	outputFile         string
 	configFileFlag     string
 	versionFlag        bool
-	noScanFlag         bool // Keep for future implementation
+	noScanFlag         bool // Now used
 )
 
 func init() {
@@ -32,7 +35,7 @@ func init() {
 	pflag.StringSliceVarP(&extensions, "extensions", "e", []string{}, "Extensions (overrides config).")
 	pflag.StringSliceVarP(&manualFiles, "files", "f", []string{}, "Manual files.")
 	pflag.StringSliceVarP(&excludePatterns, "exclude", "x", []string{}, "Exclude patterns (adds to config).")
-	pflag.BoolVar(&noGitignore, "no-gitignore", false, "Disable .gitignore processing.") // Reverted
+	pflag.BoolVar(&noGitignore, "no-gitignore", false, "Disable .gitignore processing.")
 	pflag.StringVar(&logLevelStr, "loglevel", "info", "Log level (debug, info, warn, error).")
 	pflag.StringVarP(&outputFile, "output", "o", "", "Output file path.")
 	pflag.StringVarP(&configFileFlag, "config", "c", "", "Custom config file.")
@@ -121,6 +124,8 @@ func main() {
 	}
 	finalTargetDirectory = absTargetDir
 
+	// Initial Stat Check - only exit if scan is intended OR no manual files provided
+	finalNoScan := noScanFlag // Read flag value
 	dirInfo, err := os.Stat(finalTargetDirectory)
 	if err != nil {
 		logMsg := "Error accessing target directory."
@@ -129,32 +134,43 @@ func main() {
 			logMsg = "Target directory does not exist."
 			errMsg = fmt.Sprintf("Error: Target directory '%s' not found.\n", finalTargetDirectory)
 		}
-		slog.Error(logMsg, "path", finalTargetDirectory, "error", err)
-		fmt.Fprint(os.Stderr, errMsg)
-		os.Exit(1)
-	}
-	if !dirInfo.IsDir() {
-		slog.Error("Specified target path is not a directory.", "path", finalTargetDirectory)
-		fmt.Fprintf(os.Stderr, "Error: Specified target path '%s' is not a directory.\n", finalTargetDirectory)
-		os.Exit(1)
+		// Only exit if scan is enabled OR if no manual files were given
+		if !finalNoScan || len(manualFiles) == 0 {
+			slog.Error(logMsg, "path", finalTargetDirectory, "error", err)
+			fmt.Fprint(os.Stderr, errMsg)
+			os.Exit(1)
+		} else {
+			// Log warning but allow proceeding for manual files with --no-scan
+			slog.Warn(logMsg+", proceeding for manual files (--no-scan active).",
+				"path", finalTargetDirectory, "error", err)
+		}
+	} else if dirInfo != nil && !dirInfo.IsDir() { // Check dirInfo not nil before IsDir
+		// Only exit if scan is enabled OR if no manual files were given
+		if !finalNoScan || len(manualFiles) == 0 {
+			slog.Error("Specified target path is not a directory.", "path", finalTargetDirectory)
+			fmt.Fprintf(os.Stderr, "Error: Specified target path '%s' is not a directory.\n", finalTargetDirectory)
+			os.Exit(1)
+		} else {
+			// Log warning but allow proceeding for manual files with --no-scan
+			slog.Warn("Target path is not a directory, proceeding for manual files (--no-scan active).",
+				"path", finalTargetDirectory)
+		}
 	}
 
 	commentMarker := *appConfig.CommentMarker
 	headerText := *appConfig.HeaderText
-	finalNoScan := noScanFlag // Keep for future implementation
-	_ = finalNoScan           // TODO: Remove this blank assignment when noScan logic is implemented
 
 	finalUseGitignore := *appConfig.UseGitignore
 	if pflag.CommandLine.Changed("no-gitignore") {
 		finalUseGitignore = !noGitignore
-		slog.Debug("Using gitignore setting from command line flag.", "use_gitignore", finalUseGitignore)
+		slog.Debug("Using gitignore setting from flag.", "use_gitignore", finalUseGitignore)
 	} else {
 		slog.Debug("Using gitignore setting from config/default.", "use_gitignore", finalUseGitignore)
 	}
 
 	finalExtensionsList := appConfig.IncludeExtensions
 	if pflag.CommandLine.Changed("extensions") {
-		slog.Debug("Using extensions from command line flag (overrides config).", "extensions", extensions)
+		slog.Debug("Using extensions from flag (overrides config).", "extensions", extensions)
 		finalExtensionsList = extensions
 	} else {
 		slog.Debug("Using extensions from config/default.", "extensions", appConfig.IncludeExtensions)
@@ -169,36 +185,59 @@ func main() {
 	slog.Debug("Exclude patterns from config/default.", "patterns", finalExcludePatternsList)
 	if pflag.CommandLine.Changed("exclude") {
 		flagExcludes := excludePatterns
-		slog.Debug("Adding exclude patterns from command line flag.", "patterns", flagExcludes)
+		slog.Debug("Adding exclude patterns from flag.", "patterns", flagExcludes)
 		finalExcludePatternsList = append(finalExcludePatternsList, flagExcludes...)
 	}
 	slog.Debug("Final combined exclude patterns", "patterns", finalExcludePatternsList)
 
-	if len(finalExtensionsSet) == 0 && len(manualFiles) == 0 {
+	// Input Validation
+	if finalNoScan && len(manualFiles) == 0 {
+		slog.Error("Processing criteria missing. --no-scan used and no manual files (-f) provided.")
+		fmt.Fprintln(os.Stderr, "Error: --no-scan flag used, but no files specified with -f.")
+		os.Exit(1)
+	}
+	if !finalNoScan && len(finalExtensionsSet) == 0 && len(manualFiles) == 0 {
 		slog.Error("Processing criteria missing. No extensions or manual files.")
 		fmt.Fprintln(os.Stderr, "Error: No file extensions specified and no manual files given.")
 		os.Exit(1)
 	}
 
+	// Generate Output
 	concatenatedOutput, includedFiles, emptyFiles, errorFiles, totalSize, genErr := generateConcatenatedCode(
 		finalTargetDirectory,
 		finalExtensionsSet,
 		manualFiles,
 		finalExcludePatternsList,
-		finalUseGitignore, // Pass bool
+		finalUseGitignore,
 		headerText,
 		commentMarker,
+		finalNoScan, // Pass noScan flag
 		// Pass future flags here
 	)
 
+	// --- Updated Error Handling ---
+	exitCode := 0 // Default success
 	if genErr != nil {
 		slog.Error("Error during file processing.", "error", genErr)
-		if !(os.IsNotExist(genErr)) {
+		// Check if it's the specific directory not found error AND noScan was true
+		// In this case, we allow proceeding if manual files were processed.
+		isDirNotExistErr := errors.Is(genErr, fs.ErrNotExist) && strings.Contains(genErr.Error(), finalTargetDirectory)
+
+		if !(isDirNotExistErr && finalNoScan && len(manualFiles) > 0) {
+			// If it's NOT the special allowed error case, print and set exit code
 			fmt.Fprintf(os.Stderr, "Error during processing: %v\n", genErr)
+			exitCode = 1
+		} else {
+			// Log that we are proceeding despite dir error because of --no-scan
+			slog.Warn("Ignoring target directory access error due to --no-scan.", "error", genErr)
 		}
-		os.Exit(1)
+	}
+	// Also set error code if file-specific errors occurred during processing
+	if len(errorFiles) > 0 {
+		exitCode = 1 // Mark for exit even if genErr was nil or ignored
 	}
 
+	// Determine Output Target and Summary Writer (No change needed)
 	var codeWriter io.Writer
 	var summaryWriter io.Writer
 	var outputFileHandle *os.File
@@ -207,7 +246,7 @@ func main() {
 		if errCreate != nil {
 			slog.Error("Failed to create output file.", "path", outputFile, "error", errCreate)
 			fmt.Fprintf(os.Stderr, "Error creating output file '%s': %v\n", outputFile, errCreate)
-			os.Exit(1)
+			os.Exit(1) // Exit immediately on output file error
 		}
 		outputFileHandle = file
 		codeWriter = file
@@ -219,6 +258,7 @@ func main() {
 		slog.Info("Writing concatenated code to stdout.")
 	}
 
+	// Write Concatenated Code (No change needed)
 	if concatenatedOutput != "" {
 		_, errWrite := io.WriteString(codeWriter, concatenatedOutput)
 		if errWrite != nil {
@@ -227,9 +267,9 @@ func main() {
 			if outputFileHandle != nil {
 				_ = outputFileHandle.Close()
 			}
-			os.Exit(1)
+			os.Exit(1) // Exit immediately on write error
 		}
-	} else if genErr == nil && len(includedFiles) == 0 && len(manualFiles) == 0 {
+	} else if genErr == nil && exitCode == 0 && len(includedFiles) == 0 && len(manualFiles) == 0 {
 		slog.Warn("No content generated. Output is empty.")
 	}
 
@@ -237,14 +277,18 @@ func main() {
 		errClose := outputFileHandle.Close()
 		if errClose != nil {
 			slog.Error("Failed to close output file.", "path", outputFile, "error", errClose)
+			// Don't override previous exit code if closing fails
+			if exitCode == 0 {
+				exitCode = 1
+			}
 		}
 	}
 
+	// Print Summary (No change needed)
 	printSummaryTree(includedFiles, emptyFiles, errorFiles, totalSize, finalTargetDirectory, summaryWriter)
 
 	slog.Debug("Execution finished.")
 
-	if len(errorFiles) > 0 {
-		os.Exit(1)
-	}
+	// Exit with stored code
+	os.Exit(exitCode)
 }

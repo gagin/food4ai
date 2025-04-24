@@ -105,7 +105,7 @@ func TestGenerateConcatenatedCode_BasicScan(t *testing.T) {
 	marker := "---"
 
 	output, includedFiles, emptyFiles, errorFiles, totalSize, err := generateConcatenatedCode(
-		tempDir, exts, manualFiles, excludePatterns, useGitignore, header, marker,
+		tempDir, exts, manualFiles, excludePatterns, useGitignore, header, marker, false,
 	)
 
 	assertions.NoError(err)
@@ -157,7 +157,7 @@ func TestGenerateConcatenatedCode_WithManualFiles(t *testing.T) {
 	marker := "%%%"
 
 	output, includedFiles, emptyFiles, errorFiles, totalSize, err := generateConcatenatedCode(
-		tempDir, exts, manualFiles, excludePatterns, useGitignore, header, marker,
+		tempDir, exts, manualFiles, excludePatterns, useGitignore, header, marker, false,
 	)
 
 	assertions.NoError(err)
@@ -216,7 +216,7 @@ func TestGenerateConcatenatedCode_WithExcludes(t *testing.T) {
 	marker := "!!!"
 
 	output, includedFiles, emptyFiles, errorFiles, totalSize, err := generateConcatenatedCode(
-		tempDir, exts, manualFiles, excludePatterns, useGitignore, header, marker,
+		tempDir, exts, manualFiles, excludePatterns, useGitignore, header, marker, false,
 	)
 
 	assertions.NoError(err)
@@ -275,7 +275,7 @@ ignored_dir/
 	marker := "---"
 
 	output, includedFiles, emptyFiles, errorFiles, totalSize, err := generateConcatenatedCode(
-		tempDir, exts, manualFiles, excludePatterns, useGitignore, header, marker,
+		tempDir, exts, manualFiles, excludePatterns, useGitignore, header, marker, false,
 	)
 
 	assertions.NoError(err)
@@ -323,7 +323,7 @@ func TestGenerateConcatenatedCode_EmptyFiles(t *testing.T) {
 	marker := "---"
 
 	output, includedFiles, emptyFiles, errorFiles, totalSize, err := generateConcatenatedCode(
-		tempDir, exts, manualFiles, excludePatterns, useGitignore, header, marker,
+		tempDir, exts, manualFiles, excludePatterns, useGitignore, header, marker, false,
 	)
 
 	assertions.NoError(err)
@@ -373,7 +373,7 @@ func TestGenerateConcatenatedCode_ReadError(t *testing.T) {
 	marker := "---"
 
 	output, includedFiles, emptyFiles, errorFiles, totalSize, err := generateConcatenatedCode(
-		tempDir, exts, manualFiles, excludePatterns, useGitignore, header, marker,
+		tempDir, exts, manualFiles, excludePatterns, useGitignore, header, marker, false,
 	)
 
 	assertions.NoError(err)
@@ -414,7 +414,7 @@ func TestGenerateConcatenatedCode_NonExistentDir(t *testing.T) {
 	marker := "---"
 
 	output, includedFiles, emptyFiles, errorFiles, totalSize, err := generateConcatenatedCode(
-		nonExistentDir, exts, manualFiles, excludePatterns, useGitignore, header, marker,
+		nonExistentDir, exts, manualFiles, excludePatterns, useGitignore, header, marker, false,
 	)
 
 	assertions.Error(err)
@@ -448,7 +448,7 @@ func TestGenerateConcatenatedCode_NonExistentDir_WithManualFile(t *testing.T) {
 	marker := "---"
 
 	output, includedFiles, emptyFiles, errorFiles, totalSize, err := generateConcatenatedCode(
-		nonExistentDir, exts, manualFiles, excludePatterns, useGitignore, header, marker,
+		nonExistentDir, exts, manualFiles, excludePatterns, useGitignore, header, marker, false,
 	)
 
 	assertions.Error(err)
@@ -494,7 +494,7 @@ func TestGenerateConcatenatedCode_NoFilesFound(t *testing.T) {
 	marker := "---"
 
 	output, includedFiles, emptyFiles, errorFiles, totalSize, err := generateConcatenatedCode(
-		tempDir, exts, manualFiles, excludePatterns, useGitignore, header, marker,
+		tempDir, exts, manualFiles, excludePatterns, useGitignore, header, marker, false,
 	)
 
 	assertions.NoError(err)
@@ -536,7 +536,7 @@ func TestGenerateConcatenatedCode_NonExistentManualFile(t *testing.T) {
 	marker := "---"
 
 	output, includedFiles, emptyFiles, errorFiles, totalSize, err := generateConcatenatedCode(
-		tempDir, exts, manualFiles, excludePatterns, useGitignore, header, marker,
+		tempDir, exts, manualFiles, excludePatterns, useGitignore, header, marker, false,
 	)
 
 	assertions.NoError(err)
@@ -585,7 +585,7 @@ func TestGenerateConcatenatedCode_InvalidExcludePattern(t *testing.T) {
 	marker := "---"
 
 	output, includedFiles, emptyFiles, errorFiles, totalSize, err := generateConcatenatedCode(
-		tempDir, exts, manualFiles, excludePatterns, useGitignore, header, marker,
+		tempDir, exts, manualFiles, excludePatterns, useGitignore, header, marker, false,
 	)
 
 	assertions.NoError(err)
