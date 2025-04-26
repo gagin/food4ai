@@ -271,7 +271,7 @@ Process only manually specified files (relative to CWD), including ``Makefile``:
 
 .. code-block:: bash
 
-    codecat -n -f Makefile -f cmd/codecat/main.go -f pkg/utils/helpers.go -o core_logic.go
+    codecat -n -f Makefile -f cmd/codecat/main.go -f pkg/utils/helpers.go -o core_logic.go.txt
 
 Scan ``src`` dir, use project excludes from ``.codecat_exclude``, use global config, write code to stdout:
 
