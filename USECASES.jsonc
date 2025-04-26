@@ -243,5 +243,106 @@
         "output": "Piped to llm."
       },
       "mermaid_flow": "graph TD;\n  A[Developer] --> B[Run `codecat | llm`];\n  B --> C[Scan directory];\n  C --> D[Output to stdout];\n  D --> E[Pipe to llm];\n  C --> F[Summary to stderr];"
+    },
+    // Use Case 7: Exclude Common Directory Names Globally
+    {
+      "id": "UC-007",
+      "actors": ["Developer", "CodeCat"],
+      "description": "Exclude directories with common names (like 'sample-docs' or 'build') across all projects using the global configuration's basename exclusion feature, regardless of where they appear in the directory structure.",
+      "preconditions": [
+        "Developer has multiple projects (e.g., project-a, project-b).",
+        "Project A has './sample-docs/'.",
+        "Project B has './assets/sample-docs/'.",
+        "Global config `~/.config/codecat/config.toml` exists and contains `exclude_basenames = [\"sample-docs\", \"build\"]`.",
+        "Developer runs CodeCat from the root directory of either project-a or project-b."
+      ],
+      "postconditions": "The concatenated output for each project correctly excludes files from any directory whose name matches an entry in `exclude_basenames`. The summary indicates these directories were skipped due to a basename match.",
+      "priority": "Medium",
+      "frequency": "Occasional",
+      "status": "Draft",
+      "basic_flow": [
+        "Developer ensures `~/.config/codecat/config.toml` has `exclude_basenames = [\"sample-docs\", \"build\"]`.",
+        "Developer navigates to the root of `project-a`.",
+        "Developer runs `codecat > output-a.txt`.",
+        "CodeCat reads the global config, noting `exclude_basenames`.",
+        "CodeCat scans `project-a`.",
+        "When encountering the directory './sample-docs/', CodeCat checks its basename ('sample-docs') against `exclude_basenames`.",
+        "A match is found.",
+        "CodeCat skips the './sample-docs/' directory and does not scan its contents.",
+        "CodeCat outputs the content of other included files (e.g., `src/main.py`) to `output-a.txt`.",
+        "CodeCat prints a summary to stderr, listing './sample-docs/' under skipped items with a note like '(basename match)'.",
+        "Developer navigates to the root of `project-b`.",
+        "Developer runs `codecat > output-b.txt`.",
+        "CodeCat repeats the process.",
+        "When encountering './assets/sample-docs/', CodeCat matches the basename 'sample-docs' against `exclude_basenames`.",
+        "CodeCat skips './assets/sample-docs/' and its contents.",
+        "CodeCat outputs the content of other included files (e.g., `app/core.py`) to `output-b.txt`.",
+        "CodeCat prints a summary to stderr, listing './assets/sample-docs/' under skipped items with a note like '(basename match)'."
+      ],
+      "core_scenario": "Define common, structure-agnostic exclusions once in a global config for all projects.",
+      "feature_specific_scenario": "Demonstrates the utility of `exclude_basenames` in `config.toml` for universally unwanted directory/file names.",
+      "needs": [
+        "A mechanism for global exclusion rules based solely on file/directory names.",
+        "Avoidance of repeating common exclusion patterns (like build output or sample data) in every project's `.codecat_exclude`."
+      ],
+      "choices_compromises_assumptions": {
+        "choice": "Use `exclude_basenames` list in global config for name-only glob matching.",
+        "compromise": "Basename matching might be too broad if names are ambiguous (though less likely for common build/sample directories).",
+        "assumption": "Users have common directory/file names across projects that they consistently want to exclude."
+      },
+      "solution": {
+        "config": "// ~/.config/codecat/config.toml\nexclude_basenames = [\"sample-docs\", \"build\", \"dist\", \"*.pyc\", \".venv\"]",
+        "command_a": "cd project-a && codecat > output-a.txt",
+        "summary_stderr_a": "📁 project-a (relative to CWD)\n├── src/main.py (2 KB)\n└── total: 2 KB\nSkipped: sample-docs/ (basename match)\nEmpty: none",
+        "output_a": "output-a.txt contains content from src/main.py.",
+        "command_b": "cd ../project-b && codecat > output-b.txt",
+        "summary_stderr_b": "📁 project-b (relative to CWD)\n├── app/core.py (3 KB)\n└── total: 3 KB\nSkipped: assets/sample-docs/ (basename match)\nEmpty: none",
+        "output_b": "output-b.txt contains content from app/core.py."
+      },
+      "mermaid_flow": "graph TD;\n  A[Developer] --> B(Edit ~/.config/codecat/config.toml: `exclude_basenames = [\"sample-docs\"]`);\n  B --> C{Run in project-a: `codecat`};\n  C --> D[Scan project-a files];\n  D -- encounters ./sample-docs/ --> E{Basename 'sample-docs' matches?};\n  E -- Yes --> F[Skip directory];\n  E -- No --> G[Process file/dir];\n  D -- encounters ./src/main.py --> G;\n  F --> H[Output Results (excl. sample-docs)];\n  G --> H;\n  B --> I{Run in project-b: `codecat`};\n  I --> J[Scan project-b files];\n  J -- encounters ./assets/sample-docs/ --> K{Basename 'sample-docs' matches?};\n  K -- Yes --> L[Skip directory];\n  K -- No --> M[Process file/dir];\n  J -- encounters ./app/core.py --> M;\n  L --> N[Output Results (excl. sample-docs)];\n  M --> N;"
+    },
+    // Use Case 8: Include Specific Extensionless Files Manually
+    {
+      "id": "UC-008",
+      "actors": ["Developer", "CodeCat"],
+      "description": "Include specific important files that lack extensions (like Makefile, LICENSE, or a specific config file) alongside regularly scanned source files by explicitly listing them with the -f flag.",
+      "preconditions": [
+        "Current directory contains development files (e.g., src/main.py).",
+        "Current directory also contains important extensionless files (e.g., Makefile, LICENSE).",
+        "CodeCat config includes common source extensions (like .py) but not a rule for extensionless files."
+      ],
+      "postconditions": "The concatenated output includes both the scanned source files and the specifically requested extensionless files.",
+      "priority": "Medium",
+      "frequency": "Occasional",
+      "status": "Draft",
+      "basic_flow": [
+        "Developer navigates to the project's root directory.",
+        "Developer identifies needed extensionless files (e.g., 'Makefile', 'LICENSE').",
+        "Developer runs CodeCat, specifying these files with -f flags: `codecat -f Makefile -f LICENSE > output.txt`.",
+        "CodeCat reads the configuration (e.g., including '.py').",
+        "CodeCat processes the manual files specified by -f: Reads 'Makefile' and 'LICENSE', adds their content to the output buffer, and marks them as processed.",
+        "CodeCat scans the current directory (default behavior).",
+        "CodeCat finds 'src/main.py', its extension '.py' matches the include list, so its content is added.",
+        "CodeCat finds 'Makefile' and 'LICENSE' during the scan but skips them because they were already processed manually.",
+        "CodeCat writes the combined content (Makefile, LICENSE, src/main.py) to stdout, which is redirected to 'output.txt'.",
+        "CodeCat prints a summary to stderr showing 'Makefile [M]', 'LICENSE [M]', and 'src/main.py'."
+      ],
+      "core_scenario": "Ensuring critical configuration or project files without standard extensions are included in the LLM context.",
+      "feature_specific_scenario": "Demonstrates the primary method for including extensionless files using the -f flag when they are not covered by default include rules.",
+      "needs": [
+        "A reliable way to include specific, important files regardless of their extension (or lack thereof).",
+        "Avoidance of accidentally including all extensionless files if only a few are needed."
+      ],
+      "choices_compromises_assumptions": {
+        "choice": "Use the -f flag for explicit file inclusion.",
+        "compromise": "Requires the user to manually list each desired extensionless file on the command line.",
+        "assumption": "The number of essential extensionless files per project is usually small enough for manual specification to be feasible."
+      },
+      "solution": {
+        "command": "codecat -f Makefile -f LICENSE > output.txt",
+        "summary_stderr": "📁 Project Root (relative to CWD)\n├── LICENSE [M] (1 KB)\n├── Makefile [M] (0.5 KB)\n└── src\n    └── main.py (2 KB)\nTotal: 3.5 KB\nSkipped: none\nEmpty: none",
+        "output": "output.txt contains content from Makefile, LICENSE, and src/main.py."
+      },
+      "mermaid_flow": "graph TD;\n  A[Developer] --> B(Run `codecat -f Makefile -f LICENSE > output.txt`);\n  B --> C[Process Manual Files: Makefile, LICENSE];\n  C --> D[Scan directory '.' for '.py'];\n  D -- Find src/main.py --> E[Add src/main.py content];\n  D -- Find Makefile/LICENSE --> F[Skip (already processed)];\n  E --> G[Output results to stdout];\n  F --> G;\n  G --> H[Redirect to output.txt];\n  D --> I[Summary to stderr];"
     }
   ]

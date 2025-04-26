@@ -1,0 +1,88 @@
+# ~/.config/codecat/config.toml
+
+# Basename glob patterns matched against the final file/directory name anywhere.
+# Useful for universally excluding common names (like build dirs, venvs)
+# or file types (like logs, compiled code) regardless of project structure.
+# These are matched *before* CWD-relative patterns or .gitignore.
+exclude_basenames = [
+    # --- Version Control System Internals (Never want these scanned) ---
+    ".git",
+    ".hg",
+    ".svn",
+
+    # --- Common Dependency/Package Manager Dirs ---
+    "node_modules",
+
+    # --- Common Virtual Environments ---
+    "venv",
+    ".venv",
+
+    # --- Common Build/Output Directories ---
+    "build",
+    "dist",
+    "target", # e.g., Java Maven/Gradle, Rust Cargo
+    "out",    # e.g., Go build, some IDEs
+
+    # --- Python Caches/Compiled Code ---
+    "__pycache__",
+    ".pytest_cache",
+    "*.pyc",
+    "*.pyo",
+
+    # --- Common Log Files ---
+    "*.log",
+
+    # --- OS Metadata Files ---
+    ".DS_Store", # macOS
+    "Thumbs.db", # Windows
+
+    # --- Editor Backup/Swap Files ---
+    "*.swp",
+    "*.swo",
+    "*~",
+    "*.bak",
+    "*.tmp",
+
+    # --- Temporary Directories ---
+    "temp",
+    "tmp",
+
+    # --- Common User Exclusions (Examples - Keep commented unless needed everywhere) ---
+    # "sample-docs", # Exclude any directory named 'sample-docs'
+     "testdata",    # Exclude any directory named 'testdata'
+    # "docs",        # Be careful excluding common names like 'docs' globally
+    # "site",        # Common for static site generators
+
+]
+
+# List of file extensions (without leading dot) to include by default during scans.
+# Command-line flags (-e) will override these.
+include_extensions = [
+    "go", "mod", "sum", # Go project files
+    "py", "ipynb",      # Python
+    "js", "ts", "jsx", "tsx", "html", "css", "json", "yaml", "yml", "jsonc", # Web dev
+    "md", "rst", "txt", # Documentation/Text
+    "sh", "bash",       # Shell scripts
+    "toml",             # Config files
+    "dockerfile", "Dockerfile",
+    "tf", "hcl",        # Terraform
+    "java", "kt", "gradle", # JVM
+    "cs",                # C#
+    "rb",                # Ruby
+    "php",               # PHP
+    "swift",             # Swift
+    "sql",               # SQL
+    "rs",                # Rust
+    "c", "h", "cpp", "hpp", # C/C++
+]
+
+# The marker used to delimit file sections in the output.
+comment_marker = "---"
+
+# The introductory text placed at the very beginning of the output.
+# This one doesn't have auto-newline after it, include manually as needed.
+header_text = "----- Codebase for analysis -----\n"
+
+# Whether to respect .gitignore files found during scanning by default.
+# Can be overridden by the --no-gitignore command-line flag.
+use_gitignore = true

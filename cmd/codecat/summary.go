@@ -2,6 +2,7 @@
 package main
 
 import (
+	"context" // Needed for slog.Enabled check
 	"fmt"
 	"io"
 	"log/slog"
@@ -10,45 +11,48 @@ import (
 	"strings"
 )
 
-// FileInfo represents information about an included file for the summary.
+// FileInfo - IsManual field is used
 type FileInfo struct {
 	Path     string
 	Size     int64
-	IsManual bool
+	IsManual bool // Field is relevant again
 }
 
-// TreeNode represents a node in the directory tree for summary printing.
+// TreeNode remains the same
 type TreeNode struct {
 	Name     string
 	Children map[string]*TreeNode
-	FileInfo *FileInfo // Link to FileInfo if it's a file node
+	FileInfo *FileInfo
 }
 
-// buildTree builds the file tree structure for the summary.
+// buildTree remains the same
 func buildTree(files []FileInfo) *TreeNode {
 	root := &TreeNode{Name: ".", Children: make(map[string]*TreeNode)}
 	sort.Slice(files, func(i, j int) bool { return files[i].Path < files[j].Path })
+
 	for i := range files {
 		file := &files[i]
-		normalizedPath := filepath.ToSlash(file.Path)
-		parts := strings.Split(normalizedPath, "/")
+		parts := strings.Split(file.Path, "/")
 		currentNode := root
+
 		for j, part := range parts {
 			if part == "" {
 				continue
 			}
 			isLastPart := (j == len(parts)-1)
 			childNode, exists := currentNode.Children[part]
+
 			if !exists {
 				childNode = &TreeNode{Name: part, Children: make(map[string]*TreeNode)}
 				currentNode.Children[part] = childNode
 			}
+
 			if isLastPart {
-				if childNode.FileInfo == nil {
-					childNode.FileInfo = file
-				} else {
-					slog.Warn("Tree building conflict: node already has FileInfo", "nodeName", childNode.Name)
+				if childNode.FileInfo != nil {
+					slog.Warn("Tree building conflict: Node already has FileInfo, overwriting.",
+						"nodeName", childNode.Name, "existingPath", childNode.FileInfo.Path, "newPath", file.Path)
 				}
+				childNode.FileInfo = file
 			}
 			currentNode = childNode
 		}
@@ -56,7 +60,7 @@ func buildTree(files []FileInfo) *TreeNode {
 	return root
 }
 
-// printTreeRecursive recursively prints the file tree.
+// printTreeRecursive - Conditionally add [M] marker based on log level
 func printTreeRecursive(writer io.Writer, node *TreeNode, indent string, isLast bool) {
 	if node.Name == "." {
 		childNames := make([]string, 0, len(node.Children))
@@ -69,25 +73,23 @@ func printTreeRecursive(writer io.Writer, node *TreeNode, indent string, isLast 
 		}
 		return
 	}
-	connector := "├── "
-	if isLast {
-		connector = "└── "
-	}
+
+	connector := tern(isLast, "└── ", "├── ")
 	fileInfoStr := ""
-	manualMarker := ""
+	manualMarker := "" // Initialize as empty
+
 	if node.FileInfo != nil {
-		fileInfoStr = fmt.Sprintf(" (%s)", formatBytes(node.FileInfo.Size)) // formatBytes is in helpers.go
-		if node.FileInfo.IsManual {
-			manualMarker = " [M]"
+		fileInfoStr = fmt.Sprintf(" (%s)", formatBytes(node.FileInfo.Size))
+		// Check IsManual AND if the default logger is enabled for DEBUG level
+		if node.FileInfo.IsManual && slog.Default().Enabled(context.Background(), slog.LevelDebug) {
+			manualMarker = " [M]" // Add marker only if DEBUG is active
 		}
 	}
+
+	// Use the potentially updated manualMarker
 	fmt.Fprintf(writer, "%s%s%s%s%s\n", indent, connector, node.Name, manualMarker, fileInfoStr)
-	childIndent := indent
-	if isLast {
-		childIndent += "    "
-	} else {
-		childIndent += "│   "
-	}
+
+	childIndent := indent + tern(isLast, "    ", "│   ")
 	childNames := make([]string, 0, len(node.Children))
 	for name := range node.Children {
 		childNames = append(childNames, name)
@@ -98,44 +100,69 @@ func printTreeRecursive(writer io.Writer, node *TreeNode, indent string, isLast 
 	}
 }
 
-// printSummaryTree prints the final summary output.
-func printSummaryTree(
-	includedFiles []FileInfo, emptyFiles []string, errorFiles map[string]error,
-	totalSize int64, targetDir string, outputWriter io.Writer,
+// printSummaryListSection remains the same
+func printSummaryListSection[K comparable, V any](
+	writer io.Writer,
+	titleFormat string,
+	items map[K]V,
+	getPath func(K) string,
+	getDetails func(K, V) string,
 ) {
-	fmt.Fprintln(outputWriter, "\n--- Summary ---")
-	if len(includedFiles) > 0 {
-		treeRootName := filepath.Base(targetDir)
-		if treeRootName == "." || treeRootName == string(filepath.Separator) {
-			if abs, err := filepath.Abs(targetDir); err == nil {
-				treeRootName = abs
+	fmt.Fprintf(writer, titleFormat, len(items))
+	if len(items) > 0 {
+		keys := make([]K, 0, len(items))
+		for k := range items {
+			keys = append(keys, k)
+		}
+		sort.Slice(keys, func(i, j int) bool { return getPath(keys[i]) < getPath(keys[j]) })
+		for _, k := range keys {
+			pathStr := getPath(k)
+			detailsStr := ""
+			if getDetails != nil {
+				detailsStr = getDetails(k, items[k])
+			}
+			if detailsStr != "" {
+				fmt.Fprintf(writer, "- %s: %s\n", pathStr, detailsStr)
 			} else {
-				treeRootName = targetDir
+				fmt.Fprintf(writer, "- %s\n", pathStr)
 			}
 		}
-		fmt.Fprintf(outputWriter, "Included %d files (%s total) from '%s':\n", len(includedFiles), formatBytes(totalSize), treeRootName)
+	}
+}
+
+// printSummaryTree remains the same
+func printSummaryTree(
+	includedFiles []FileInfo,
+	emptyFiles []string,
+	errorFiles map[string]error,
+	totalSize int64,
+	cwd string,
+	outputWriter io.Writer,
+) {
+	fmt.Fprintln(outputWriter, "\n--- Summary ---")
+
+	if len(includedFiles) > 0 {
+		base := filepath.Base(cwd)
+		cwdDisplay := tern(base != "." && base != string(filepath.Separator),
+			fmt.Sprintf("'%s'", base), fmt.Sprintf("'%s'", cwd))
+		fmt.Fprintf(outputWriter, "Included %d files (%s total) relative to CWD %s:\n",
+			len(includedFiles), formatBytes(totalSize), cwdDisplay)
 		fileTree := buildTree(includedFiles)
-		printTreeRecursive(outputWriter, fileTree, "", true)
+		printTreeRecursive(outputWriter, fileTree, "", true) // Calls modified func
 	} else {
 		fmt.Fprintln(outputWriter, "No files included in the output.")
 	}
-	if len(emptyFiles) > 0 {
-		fmt.Fprintf(outputWriter, "\nEmpty files found (%d):\n", len(emptyFiles))
-		sort.Strings(emptyFiles)
-		for _, p := range emptyFiles {
-			fmt.Fprintf(outputWriter, "- %s\n", p)
-		}
+
+	emptyFilesMap := make(map[string]struct{}, len(emptyFiles))
+	for _, path := range emptyFiles {
+		emptyFilesMap[path] = struct{}{}
 	}
-	if len(errorFiles) > 0 {
-		fmt.Fprintf(outputWriter, "\nErrors encountered (%d):\n", len(errorFiles))
-		errorPaths := make([]string, 0, len(errorFiles))
-		for p := range errorFiles {
-			errorPaths = append(errorPaths, p)
-		}
-		sort.Strings(errorPaths)
-		for _, p := range errorPaths {
-			fmt.Fprintf(outputWriter, "- %s: %v\n", p, errorFiles[p])
-		}
-	}
+	printSummaryListSection(outputWriter, "\nEmpty files found (%d):\n",
+		emptyFilesMap, func(path string) string { return path }, nil)
+
+	printSummaryListSection(outputWriter, "\nErrors encountered (%d):\n",
+		errorFiles, func(path string) string { return path },
+		func(path string, err error) string { return err.Error() })
+
 	fmt.Fprintln(outputWriter, "---------------")
 }

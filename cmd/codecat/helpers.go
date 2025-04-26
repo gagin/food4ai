@@ -2,14 +2,17 @@
 package main
 
 import (
-	"fmt" // Ensure regexp is imported
+	"fmt"
+	"log/slog"
+	"path/filepath"
 	"sort"
 	"strings"
 )
 
-// processExtensions processes a list of extension strings into a set for quick lookup.
+// --- Other helper functions remain the same ---
 func processExtensions(extList []string) map[string]struct{} {
 	processed := make(map[string]struct{})
+	slog.Debug("Processing extensions list", "input_list", extList)
 	for _, ext := range extList {
 		parts := strings.Split(ext, ",")
 		for _, part := range parts {
@@ -20,13 +23,17 @@ func processExtensions(extList []string) map[string]struct{} {
 			if !strings.HasPrefix(cleaned, ".") {
 				cleaned = "." + cleaned
 			}
+			if cleaned == "." {
+				slog.Warn("Ignoring invalid extension format '.' - use specific filenames with -f for extensionless files.",
+					"input_part", part)
+				continue
+			}
 			processed[cleaned] = struct{}{}
 		}
 	}
+	slog.Debug("Finished processing extensions", "processed_keys", mapsKeys(processed))
 	return processed
 }
-
-// mapsKeys Helper to get map keys for logging set contents
 func mapsKeys[M ~map[K]V, K comparable, V any](m M) []K {
 	r := make([]K, 0, len(m))
 	for k := range m {
@@ -39,8 +46,6 @@ func mapsKeys[M ~map[K]V, K comparable, V any](m M) []K {
 	})
 	return r
 }
-
-// formatBytes formats bytes into human-readable string.
 func formatBytes(b int64) string {
 	const unit = 1024
 	if b < unit {
@@ -58,26 +63,31 @@ func formatBytes(b int64) string {
 	}
 	return fmt.Sprintf("%.1f %ciB", val, unitPrefix)
 }
-
-// globToRegex converts simple globs (*, ?) to regex for filename matching.
-// Anchors the regex to match the whole string.
-func globToRegex(glob string) string {
-	var regex strings.Builder
-	regex.WriteString("^") // Anchor start
-	for i := 0; i < len(glob); i++ {
-		char := glob[i]
-		switch char {
-		case '*':
-			regex.WriteString(".*")
-		case '?':
-			regex.WriteString(".")
-		case '.', '[', ']', '{', '}', '(', ')', '+', '^', '$', '|', '\\':
-			regex.WriteByte('\\')
-			regex.WriteByte(char)
-		default:
-			regex.WriteByte(char)
+func matchesGlob(target string, patterns []string) (bool, string) {
+	for _, pattern := range patterns {
+		match, _ := filepath.Match(pattern, target)
+		if match {
+			return true, pattern
 		}
 	}
-	regex.WriteString("$") // Anchor end
-	return regex.String()
+	return false, ""
+}
+func contains(slice []string, item string) bool {
+	for _, s := range slice {
+		if s == item {
+			return true
+		}
+	}
+	return false
+}
+func appendFileContent(builder *strings.Builder, marker, relPathCwd string, content []byte) {
+	slog.Debug("Adding file content to output.", "path", relPathCwd, "size", len(content))
+	builder.WriteString(fmt.Sprintf("%s %s\n%s%s\n",
+		marker, relPathCwd, string(content), marker))
+}
+func tern[T any](condition bool, trueVal, falseVal T) T {
+	if condition {
+		return trueVal
+	}
+	return falseVal
 }
