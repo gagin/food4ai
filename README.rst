@@ -254,21 +254,28 @@ Example Usage
 -------------
 
 Scan current directory using defaults (respects ``.gitignore`` recursively, uses config):
+
 .. code-block:: bash
+
     codecat > output.txt
 
-Scan current directory, disable ``.gitignore``, explicitly exclude ``tests`` dir and ``*.log`` files (relative to CWD), include only ``.go`` files, write to file:
+Scan current directory, disable ``.gitignore``, explicitly exclude ``tests`` dir (relative to CWD), include only ``.go`` files, write to file:
+
 .. code-block:: bash
-    codecat --no-gitignore -x "tests,*.log" -e go -o codebase.go.txt
+
+    codecat --no-gitignore -x tests -e go -o codebase.go.txt
 
 Process only manually specified files (relative to CWD), including ``Makefile``:
+
 .. code-block:: bash
+
     codecat -n -f Makefile -f cmd/codecat/main.go -f pkg/utils/helpers.go -o core_logic.go
 
 Scan ``src`` dir, use project excludes from ``.codecat_exclude``, use global config, write code to stdout:
-.. code-block:: bash
-    codecat -d src
 
+.. code-block:: bash
+
+    codecat -d src
 
 Version History
 ---------------
