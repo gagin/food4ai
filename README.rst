@@ -1,4 +1,6 @@
-# README.rst
+==========
+README.rst
+==========
 
 codecat
 =======
@@ -27,7 +29,7 @@ into a single output stream or file. Each file's content is clearly delimited
 with markers indicating the filename relative to your **Current Working Directory (CWD)**.
 A summary of included files, sizes, and any errors is printed separately.
 
-See `usecases.jsonc <./usecases.jsonc>`_ for detailed usage scenarios.
+See `USECASES.jsonc <./USECASES.jsonc>`_ for detailed usage scenarios.
 See `TODO.rst <./TODO.rst>`_ for planned features and improvements.
 
 
