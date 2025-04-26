@@ -150,26 +150,21 @@ test_case_1() {
     local test_config_file="test_config.toml"
     cat << EOF > "$test_config_file"
 # Test-specific config to ensure exclusions
-
-# Keep default extensions or specify needed ones
-include_extensions = ["txt", "log"] # Need txt for a.txt, log for c.log
-
-# Crucially, define the basename excludes needed for *this* test
+include_extensions = ["txt", "log"]
 exclude_basenames = ["sample-docs", "*.log"]
-
-# Other settings can be omitted to use defaults if desired
 use_gitignore = false
 EOF
 
     # --- Create expected output ---
+    # FIX: Update the header and remove the extra blank line to match the default config
     cat << EOF > expected_output.txt
-Codebase for analysis:
-
+----- Codebase for analysis -----
 --- scantest/a.txt
 include me
 ---
 EOF
     # --- Create expected summary ---
+    # (No change needed for summary structure)
     cat << EOF > expected_summary.txt
 Included 1 files (11 B total) relative to CWD 'PLACEHOLDER_CWD':
 └── scantest
@@ -188,7 +183,6 @@ EOF
 
     return $?
 }
-
 
 # --- Main Execution ---
 trap cleanup EXIT ERR
