@@ -8,7 +8,7 @@ codecat
 
 A command-line tool to concatenate source code files into a single output,
 formatted for easy consumption by Large Language Models (LLMs) or other AI
-analysis tools. Uses ``gocodewalker`` for robust, Git-compatible
+analysis tools. Uses `gocodewalker <https://github.com/boyter/gocodewalker>`_ for robust, Git-compatible
 ``.gitignore`` / ``.ignore`` handling.
 
 .. image:: https://tokei.rs/b1/github/gagin/codecat
