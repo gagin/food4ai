@@ -4,7 +4,7 @@ README.rst
 
 codecat
 =======
-**Version:** 0.4.1
+**Version:** 0.4.2
 
 A command-line tool to concatenate source code files into a single output,
 formatted for easy consumption by Large Language Models (LLMs) or other AI
