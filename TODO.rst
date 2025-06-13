@@ -14,6 +14,7 @@ Medium Priority / Refinements
 
 *   **Refactor Tests:** Ensure all tests are in the most appropriate `*_test.go` file.
 *   **Review Usecases:** Is everything covered?
+*   **Files with comma in the name problem:** `codecat -e a\,go -f 'b\,c.log'`
 
 Low Priority / Future Ideas
 ---------------------------

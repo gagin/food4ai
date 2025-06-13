@@ -4,7 +4,7 @@ README.rst
 
 codecat
 =======
-**Version:** 0.4.0
+**Version:** 0.4.1
 
 A command-line tool to concatenate source code files into a single output,
 formatted for easy consumption by Large Language Models (LLMs) or other AI
@@ -134,9 +134,10 @@ and customize it with your preferred default extensions and global basename excl
 Located at ``~/.config/codecat/config.toml`` by default.
 
 *   **`exclude_basenames = [...]`**:
+    *   There's a BUG where directory names aren't excluded with this rule
     *   A list of **glob patterns** matched against the **basename** (the final file or directory name) of any item encountered during scanning *or* listed via ``-f``.
     *   **Use Case:** Globally excluding common names like ``node_modules``, ``*.log``, ``build``, ``.DS_Store``, etc., regardless of where they appear in *any* project you run ``codecat`` on. Offers broader, name-based exclusion than typical path-relative ``.gitignore``.
-    *   These patterns are checked *first*. If a directory basename matches, the directory and its contents are excluded (unless a file within is specified with ``-f``).
+    *   These patterns are checked *first*. <strikethrough>If a directory basename matches, the directory and its contents are excluded (unless a file within is specified with ``-f``).
     *   Defaults include common VCS, build, cache, log, and OS metadata files/dirs.
 
 *   **`include_extensions = [...]`**:

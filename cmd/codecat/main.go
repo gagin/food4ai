@@ -16,24 +16,24 @@ import (
 	pflag "github.com/spf13/pflag"
 )
 
-const Version = "0.4.0" // Incremented version for log level default change
+const Version = "0.4.1" // Incremented version for log level default change
 
 var (
-	targetDirFlagValue string
-	extensions         []string
-	manualFiles        []string
-	excludePatterns    []string
-	noGitignore        bool
-	logLevelStr        string // Flag variable
-	outputFile         string
-	configFileFlag     string
-	versionFlag        bool
-	noScanFlag         bool
+	targetDirFlagValues []string
+	extensions          []string
+	manualFiles         []string
+	excludePatterns     []string
+	noGitignore         bool
+	logLevelStr         string // Flag variable
+	outputFile          string
+	configFileFlag      string
+	versionFlag         bool
+	noScanFlag          bool
 )
 
 func init() {
-	pflag.StringVarP(&targetDirFlagValue, "directory", "d", "",
-		"Target directory/directories to scan (comma-separated, optional).")
+	pflag.StringSliceVarP(&targetDirFlagValues, "directory", "d", []string{},
+		"Target directory/directories to scan. Can be used multiple times or as a comma-separated list.")
 	pflag.StringSliceVarP(&extensions, "extensions", "e", []string{},
 		"Extensions to include (overrides config, comma-separated).")
 	pflag.StringSliceVarP(&manualFiles, "files", "f", []string{},
@@ -205,17 +205,17 @@ func main() {
 	if len(positionalArgs) == 1 {
 		if targetDirFlagProvided {
 			slog.Error("Cannot use both positional argument and -d flag.",
-				"positional", positionalArgs[0], "flag", targetDirFlagValue)
+				"positional", positionalArgs[0], "flag", targetDirFlagValues)
 			fmt.Fprintf(os.Stderr,
 				"Error: Cannot specify a target directory via positional argument ('%s') and the -d flag ('%s') simultaneously.\n",
-				positionalArgs[0], targetDirFlagValue)
+				positionalArgs[0], strings.Join(targetDirFlagValues, ", "))
 			pflag.Usage()
 			os.Exit(1)
 		}
 		scanDirs = []string{positionalArgs[0]}
 		slog.Debug("Using scan directory from positional argument.", "dir", scanDirs[0])
 	} else if targetDirFlagProvided {
-		scanDirs = parseCommaSeparatedSlice([]string{targetDirFlagValue})
+		scanDirs = parseCommaSeparatedSlice(targetDirFlagValues)
 		slog.Debug("Using scan directories from -d flag.", "dirs", scanDirs)
 	} else if !noScanFlag {
 		scanDirs = []string{"."}

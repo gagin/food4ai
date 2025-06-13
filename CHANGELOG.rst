@@ -30,6 +30,14 @@ Changed
 *   Refine unit tests after integration test fixes.
 
 
+`0.4.1`_ - 2025-06-12
+---------------------
+
+Fixed
++++++
+
+*   Fixed issue where multiple -d arguments were not processed properly (or comma-separated directories in a single -d argument).
+
 `0.4.0`_ - 2025-04-25
 ---------------------
 
