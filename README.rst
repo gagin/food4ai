@@ -11,9 +11,7 @@ formatted for easy consumption by Large Language Models (LLMs) or other AI
 analysis tools. Uses `gocodewalker <https://github.com/boyter/gocodewalker>`_ for robust, Git-compatible
 ``.gitignore`` / ``.ignore`` handling.
 
-.. image:: https://tokei.rs/b1/github/gagin/codecat
-   :alt: Lines of Code
-   :target: https://github.com/gagin/codecat
+**There's a BUG currently where .gitignore is only taken from target directories, not from the directory where the command is ran from**
 
 Purpose
 -------
@@ -93,11 +91,10 @@ are interpreted relative to the CWD.
     Comma-separated list of specific file paths (relative to CWD or absolute) to include manually. **Highest priority:** Bypasses directory-based exclusions (like ``-x test_data``) and ``.gitignore``. This is the **only** way to include specific extensionless files (like ``Makefile`` or ``LICENSE``).
 
 *   **-x, --exclude** *pattern1,pattern2,...*
-    Comma-separated list of glob patterns (standard Go `filepath.Match` syntax) to exclude. Matched against paths relative to **CWD**. Adds to patterns from ``.codecat_exclude``.
-    *   ``*.log``: Excludes matching files anywhere relative to CWD.
+    Comma-separated list of paths related to exclude. Matched against paths relative to **CWD**. Doesn't supports globs/wildcards or partial names. Adds to patterns from ``.codecat_exclude``.
+
     *   ``path/to/file.txt``: Excludes that specific file.
-    *   ``build``: Excludes a file or directory named ``build`` relative to CWD *and* all contents if it's a directory (trailing slash **not** required).
-    *   ``*_cache``: Excludes files/directories ending in ``_cache`` and their contents if directories.
+    *   ``build``: Excludes a file or directory named ``build`` relative to CWD *and* all contents if it's a directory (trailing slash **not** required). Directory ``deeper/build`` will still be included.
 
 *   **--no-gitignore**
     Disable processing of ``.gitignore`` and ``.ignore`` files found recursively. By default (without this flag), Git-compatible recursive ignore processing is enabled. Overrides config's ``use_gitignore`.
@@ -134,25 +131,30 @@ and customize it with your preferred default extensions and global basename excl
 Located at ``~/.config/codecat/config.toml`` by default.
 
 *   **`exclude_basenames = [...]`**:
-    *   There's a BUG where directory names aren't excluded with this rule
+
+    *   There's a **BUG** currently where directory names aren't excluded with this rule
     *   A list of **glob patterns** matched against the **basename** (the final file or directory name) of any item encountered during scanning *or* listed via ``-f``.
     *   **Use Case:** Globally excluding common names like ``node_modules``, ``*.log``, ``build``, ``.DS_Store``, etc., regardless of where they appear in *any* project you run ``codecat`` on. Offers broader, name-based exclusion than typical path-relative ``.gitignore``.
     *   These patterns are checked *first*. <strikethrough>If a directory basename matches, the directory and its contents are excluded (unless a file within is specified with ``-f``).
     *   Defaults include common VCS, build, cache, log, and OS metadata files/dirs.
 
 *   **`include_extensions = [...]`**:
+
     *   Default list of extensions (e.g., "py", "go", "js") to include during scans.
     *   Overridden by the ``-e`` flag if used.
     *   **Note:** Files without extensions (like ``Makefile``, ``LICENSE``) are **not** included by default during scans. Use the ``-f`` flag to include specific extensionless files.
 
 *   **`use_gitignore = true | false`**:
+
     *   Whether to enable recursive ``.gitignore`` / ``.ignore`` processing by default.
     *   Overridden by ``--no-gitignore``.
 
 *   **`header_text = "..."`**:
+
     *   Optional text prepended to the output. Include trailing ``\n`` within the string if desired, as no extra newlines are added automatically after the header. Default includes one ``\n``.
 
 *   **`comment_marker = "---"`**:
+
     *   The string used to delimit file sections.
 
 **2. Project Config (`.codecat_exclude`)**
@@ -293,5 +295,9 @@ See `CHANGELOG.rst <./CHANGELOG.rst>`_ for detailed history.
 To-Do and Known Problems
 ------------------------
 See `TODO.rst <./TODO.rst>`_.
+Biggest ones:
+
+* gitignore is applied from target directory, not project root
+* exclude patterns don't work with globs
 
 ---
