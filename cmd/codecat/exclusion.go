@@ -41,56 +41,47 @@ func NewDefaultExcluder(basenamePatterns, cwdRelativePatterns []string) *Default
 
 // IsExcluded implements the Excluder interface with ancestor checking.
 func (e *DefaultExcluder) IsExcluded(info PathInfo) (excluded bool, reason string, pattern string) {
-	// --- Check Ancestors ---
-	// Iterate through parent directories of the current item's CWD-relative path
+	// --- ANCESTOR CHECKS ---
+
+	// Check 1: Robustly check if any parent directory's BASENAME is in the global exclude list.
+	// This fixes the bug where a subdirectory like 'exclude-me' wasn't being excluded by a basename rule.
+	pathParts := strings.Split(filepath.ToSlash(info.RelPathCwd), "/")
+	if len(pathParts) > 1 {
+		// Check all parts except the last one (the item's own basename)
+		for _, part := range pathParts[:len(pathParts)-1] {
+			if match, p := matchesGlob(part, e.basenamePatterns); match {
+				slog.Debug("Exclusion check: path excluded due to ancestor basename match",
+					"path", info.RelPathCwd, "ancestor", part, "pattern", p)
+				return true, fmt.Sprintf("ancestor %s basename match", part), p
+			}
+		}
+	}
+
+	// Check 2: Check for CWD-relative patterns matching any ancestor path.
+	// This preserves the working logic for '.codecat_exclude' files (e.g., excluding 'sample-docs').
 	currentParent := info.RelPathCwd
 	for {
-		// Get the directory containing the current path component
 		currentParent = filepath.Dir(currentParent)
-		// Stop if we reach the root (".") or an empty string
 		if currentParent == "." || currentParent == "" || currentParent == "/" {
 			break
 		}
-
-		// Check 1: Is this ancestor explicitly in the excluded map?
-		e.mu.RLock()
-		causingPattern, exists := e.excludedDirRelPathsCwd[currentParent]
-		e.mu.RUnlock()
-		if exists {
-			slog.Debug("Exclusion check: path excluded due to ancestor in map",
-				"path", info.RelPathCwd, "ancestorDir", currentParent, "causingPattern", causingPattern)
-			return true, fmt.Sprintf("ancestor %s excluded", currentParent), causingPattern
-		}
-
-		// Check 2: Would this ancestor be excluded by basename?
-		ancestorBasename := filepath.Base(currentParent)
-		if match, p := matchesGlob(ancestorBasename, e.basenamePatterns); match {
-			slog.Debug("Exclusion check: path excluded due to ancestor basename match",
-				"path", info.RelPathCwd, "ancestorDir", currentParent, "basename", ancestorBasename, "pattern", p)
-			// We don't add the ancestor to the map here, just determine exclusion
-			return true, fmt.Sprintf("ancestor %s basename match", currentParent), p
-		}
-
-		// Check 3: Would this ancestor be excluded by CWD rules (exact/glob or prefix)?
-		// Check exact/glob match for the ancestor path
+		// CWD-relative glob match
 		if match, p := matchesGlob(currentParent, e.cwdRelativePatterns); match {
-			slog.Debug("Exclusion check: path excluded due to ancestor CWD exact/glob match",
-				"path", info.RelPathCwd, "ancestorDir", currentParent, "pattern", p)
+			slog.Debug("Exclusion check: path excluded due to ancestor CWD exact/glob match", "path", info.RelPathCwd, "ancestorDir", currentParent, "pattern", p)
 			return true, fmt.Sprintf("ancestor %s CWD match", currentParent), p
 		}
-		// Check prefix match using the original patterns against the ancestor
+		// CWD-relative prefix match (e.g., 'docs/' matches 'docs/file.txt')
 		for _, patt := range e.cwdRelativePatterns {
 			cleanPattern := strings.TrimRight(patt, `\/`)
-			if cleanPattern != "" && (currentParent == cleanPattern || strings.HasPrefix(currentParent, cleanPattern+"/")) {
-				slog.Debug("Exclusion check: path excluded due to ancestor CWD prefix match",
-					"path", info.RelPathCwd, "ancestorDir", currentParent, "pattern", patt)
+			if cleanPattern != "" && strings.HasPrefix(currentParent, cleanPattern+"/") {
+				slog.Debug("Exclusion check: path excluded due to ancestor CWD prefix match", "path", info.RelPathCwd, "ancestorDir", currentParent, "pattern", patt)
 				return true, fmt.Sprintf("ancestor %s CWD prefix match", currentParent), patt
 			}
 		}
 	}
-	// --- End Ancestor Check ---
 
-	// --- Check Current Item (if not excluded by ancestors) ---
+	// --- CURRENT ITEM CHECKS (if not excluded by an ancestor) ---
+
 	// Check Basename Excludes for the item itself
 	if match, p := matchesGlob(info.BaseName, e.basenamePatterns); match {
 		slog.Debug("Exclusion check: item excluded by basename",
@@ -106,21 +97,27 @@ func (e *DefaultExcluder) IsExcluded(info PathInfo) (excluded bool, reason strin
 		return true, "basename match", p
 	}
 
-	// Check CWD Relative Patterns (Match only, prefix handled by ancestor check now)
-	if match, p := matchesGlob(info.RelPathCwd, e.cwdRelativePatterns); match {
-		slog.Debug("Exclusion check: item excluded by CWD-relative exact/glob",
-			"path", info.RelPathCwd, "pattern", p)
-		if info.IsDir {
-			e.mu.Lock()
-			if _, exists := e.excludedDirRelPathsCwd[info.RelPathCwd]; !exists {
-				slog.Debug("Adding dir to excluded map (item CWD exact/glob match).", "relPathCwd", info.RelPathCwd, "pattern", p)
-				e.excludedDirRelPathsCwd[info.RelPathCwd] = p
-			}
-			e.mu.Unlock()
+	// Check CWD Relative Patterns for the item itself
+	for _, p := range e.cwdRelativePatterns {
+		match, _ := filepath.Match(p, info.RelPathCwd)
+		// Also check if a pattern like "foo/" matches directory "foo"
+		if !match && info.IsDir && strings.HasSuffix(p, "/") {
+			match, _ = filepath.Match(strings.TrimRight(p, "/"), info.RelPathCwd)
 		}
-		return true, "CWD-relative match", p
+		if match {
+			slog.Debug("Exclusion check: item excluded by CWD-relative pattern",
+				"path", info.RelPathCwd, "pattern", p)
+			if info.IsDir {
+				e.mu.Lock()
+				if _, exists := e.excludedDirRelPathsCwd[info.RelPathCwd]; !exists {
+					slog.Debug("Adding dir to excluded map (item CWD match).", "relPathCwd", info.RelPathCwd, "pattern", p)
+					e.excludedDirRelPathsCwd[info.RelPathCwd] = p
+				}
+				e.mu.Unlock()
+			}
+			return true, "CWD-relative match", p
+		}
 	}
-	// --- End Current Item Check ---
 
 	// Not excluded by any rule
 	slog.Debug("Exclusion check: path not excluded", "path", info.RelPathCwd)

@@ -71,11 +71,9 @@ func generateConcatenatedCode(
 	slog.Debug("Using combined CWD-relative exclude patterns", "patterns", cwdRelativeExcludePatterns)
 
 	// --- Process Manually Specified Files (-f) ---
-	// Call the function from manual_files.go - REMOVE exclude patterns from call
 	processManualFiles(
 		cwd,
 		manualFilePaths,
-		// No longer pass exclude lists here
 		marker,
 		&outputBuilder,
 		processedAbsPaths,
@@ -88,7 +86,6 @@ func generateConcatenatedCode(
 	// --- Perform Directory Scan ---
 	shouldScan := !noScan && len(scanDirs) > 0
 	if shouldScan {
-		// Create Excluder using the validated/combined patterns for the scan phase
 		excluder := NewDefaultExcluder(validBasenameExcludes, cwdRelativeExcludePatterns)
 
 		if len(exts) == 0 && len(manualFilePaths) == 0 {
@@ -96,63 +93,50 @@ func generateConcatenatedCode(
 		}
 		slog.Info("Starting file scan.", "scanDirs", scanDirs, "useGitignore", useGitignore)
 
+		// Validate all scanDirs before starting the single walk from CWD
 		for _, scanDir := range scanDirs {
-			slog.Debug("Scanning directory", "path", scanDir)
-			// Directory validation...
+			slog.Debug("Validating scan directory", "path", scanDir)
 			dirInfo, statErr := os.Stat(scanDir)
 			if statErr != nil {
 				logMsg := tern(os.IsNotExist(statErr), "Target scan directory does not exist.", "Cannot stat target scan directory.")
 				slog.Error(logMsg, "path", scanDir, "error", statErr)
-				relScanDir, relErr := filepath.Rel(cwd, scanDir)
-				relScanDir = tern(relErr == nil, filepath.ToSlash(relScanDir), filepath.ToSlash(scanDir))
-				errorFiles[relScanDir+"/"] = statErr
+				relScanDir, _ := filepath.Rel(cwd, scanDir)
+				errorFiles[filepath.ToSlash(relScanDir)+"/"] = statErr
 				if returnedErr == nil {
 					returnedErr = fmt.Errorf("scan directory '%s' error: %w", scanDir, statErr)
 				}
-				continue
+				continue // Continue validation even if one dir has an error
 			}
 			if !dirInfo.IsDir() {
 				errMsg := fmt.Errorf("target scan path '%s' is not a directory", scanDir)
 				slog.Error(errMsg.Error(), "path", scanDir)
-				relScanDir, relErr := filepath.Rel(cwd, scanDir)
-				relScanDir = tern(relErr == nil, filepath.ToSlash(relScanDir), filepath.ToSlash(scanDir))
-				errorFiles[relScanDir] = errMsg
+				relScanDir, _ := filepath.Rel(cwd, scanDir)
+				errorFiles[filepath.ToSlash(relScanDir)] = errMsg
 				if returnedErr == nil {
 					returnedErr = errMsg
 				}
-				continue
 			}
+		}
 
-			// Setup walker...
+		// If a fatal validation error occurred, stop before walking.
+		if returnedErr != nil {
+			slog.Error("Aborting scan due to errors with specified scan directories.")
+		} else {
+			// **BUG FIX #1**: Always start the walker from CWD to respect its .gitignore.
+			// We will filter for scanDirs down below.
 			fileListQueue := make(chan *gocodewalker.File, 100)
-			absScanDir, errAbsScan := filepath.Abs(scanDir)
-			if errAbsScan != nil {
-				slog.Error("Could not get absolute path for scan directory, gitignore might be affected.", "path", scanDir, "error", errAbsScan)
-				absScanDir = scanDir
-			}
-			fileWalker := gocodewalker.NewFileWalker(absScanDir, fileListQueue)
+			fileWalker := gocodewalker.NewFileWalker(cwd, fileListQueue)
 			fileWalker.IgnoreGitIgnore = !useGitignore
 			fileWalker.IgnoreIgnoreFile = !useGitignore
-			walkerExts := []string{}
-			for extWithDot := range exts {
-				if extWithDot != "" {
-					walkerExts = append(walkerExts, strings.TrimPrefix(extWithDot, "."))
-				}
-			}
-			if len(walkerExts) > 0 {
-				fileWalker.AllowListExtensions = walkerExts
-				slog.Debug("Set walker AllowListExtensions", "extensions", walkerExts)
-			} else {
-				fileWalker.AllowListExtensions = nil
-				slog.Debug("No specific extensions provided; walker allows all.")
-			}
+
 			var walkErr error
 			var firstWalkError error
 			processingDone := make(chan struct{})
-			go func() { // Start walker
+
+			go func() {
 				defer close(processingDone)
 				walkerErrorHandler := func(e error) bool {
-					slog.Warn("Error reported by file walker.", "scanDir", absScanDir, "error", e)
+					slog.Warn("Error reported by file walker.", "scanDir", cwd, "error", e)
 					if firstWalkError == nil {
 						firstWalkError = e
 					}
@@ -160,62 +144,68 @@ func generateConcatenatedCode(
 				}
 				fileWalker.SetErrorHandler(walkerErrorHandler)
 				walkErr = fileWalker.Start()
-				if walkErr != nil {
-					slog.Error("File walker failed for directory.", "scanDir", absScanDir, "error", walkErr)
-				}
 			}()
-			// Process walker results
+
 			for f := range fileListQueue {
 				absPath := f.Location
-				baseName := filepath.Base(absPath)
-				relPathCwd, errRel := filepath.Rel(cwd, absPath)
-				relPathCwd = tern(errRel == nil, filepath.ToSlash(relPathCwd), filepath.ToSlash(absPath))
-				if errRel != nil {
-					slog.Warn("Could not get relative path for scanned item, using absolute.", "absolutePath", absPath, "cwd", cwd, "error", errRel)
+
+				// **BUG FIX #1 (cont.)**: Filter results to only include files within the target scanDirs.
+				isInScanDir := false
+				for _, dir := range scanDirs {
+					// Check if the file's absolute path is the scan dir itself or is inside it.
+					if absPath == dir || strings.HasPrefix(absPath, dir+string(filepath.Separator)) {
+						isInScanDir = true
+						break
+					}
 				}
-				slog.Debug("Processing item from walker", "absPath", absPath, "relPathCwd", relPathCwd, "baseName", baseName)
+				if !isInScanDir {
+					continue // Not in a directory we're supposed to scan.
+				}
+
 				if processedAbsPaths[absPath] {
-					slog.Debug("Walk: Skipping item already processed manually.", "path", relPathCwd)
 					continue
 				}
+
+				baseName := filepath.Base(absPath)
+				relPathCwd, _ := filepath.Rel(cwd, absPath)
+				relPathCwd = filepath.ToSlash(relPathCwd)
+
 				fileInfo, statErr := os.Stat(absPath)
 				if statErr != nil {
-					slog.Warn("Could not stat path from walker.", "path", relPathCwd, "error", statErr)
 					errorFiles[relPathCwd] = statErr
 					processedAbsPaths[absPath] = true
 					continue
 				}
+
 				isDir := fileInfo.IsDir()
 				pathInfo := PathInfo{AbsPath: absPath, RelPathCwd: relPathCwd, BaseName: baseName, IsDir: isDir}
-				excluded, reason, pattern := excluder.IsExcluded(pathInfo) // Use excluder here
+				excluded, reason, pattern := excluder.IsExcluded(pathInfo)
 				if excluded {
 					logMsg := tern(isDir, "Excluding directory and its contents.", "Excluding file.")
 					slog.Log(nil, slog.LevelDebug, logMsg, "path", relPathCwd, "reason", reason, "pattern", pattern)
 					processedAbsPaths[absPath] = true
 					continue
 				}
+
 				if isDir {
-					slog.Debug("Walk: Processing directory (not excluded).", "path", relPathCwd)
 					processedAbsPaths[absPath] = true
 					continue
 				}
+
 				currentExt := strings.ToLower(filepath.Ext(baseName))
 				_, extAllowed := exts[currentExt]
-				slog.Debug("Checking file extension.", "path", relPathCwd, "ext", currentExt, "allowed", extAllowed)
 				if len(exts) > 0 && !extAllowed {
-					slog.Debug("Walk: Skipping file with non-matching extension.", "path", relPathCwd, "ext", currentExt)
 					processedAbsPaths[absPath] = true
 					continue
 				}
+
 				content, errRead := os.ReadFile(absPath)
 				if errRead != nil {
-					slog.Warn("Error reading file content.", "path", relPathCwd, "error", errRead)
 					errorFiles[relPathCwd] = errRead
 					processedAbsPaths[absPath] = true
 					continue
 				}
 				if len(content) == 0 {
-					slog.Debug("Found empty file during scan.", "path", relPathCwd)
 					emptyFiles = append(emptyFiles, relPathCwd)
 					processedAbsPaths[absPath] = true
 					continue
@@ -227,17 +217,16 @@ func generateConcatenatedCode(
 				processedAbsPaths[absPath] = true
 			}
 			<-processingDone
+
 			finalWalkError := walkErr
 			if finalWalkError == nil && firstWalkError != nil {
 				finalWalkError = firstWalkError
-				slog.Warn("Walk completed with non-critical errors.", "scanDir", absScanDir, "first_error", finalWalkError)
-			} else if finalWalkError != nil {
-				slog.Error("Walk failed for directory.", "scanDir", absScanDir, "error", finalWalkError)
 			}
 			if returnedErr == nil && finalWalkError != nil {
-				returnedErr = fmt.Errorf("file walk operation failed for '%s': %w", scanDir, finalWalkError)
+				returnedErr = fmt.Errorf("file walk operation failed for '%s': %w", cwd, finalWalkError)
 			}
 		}
+
 		if returnedErr == nil {
 			slog.Info("File scan completed.")
 		} else {
@@ -249,7 +238,6 @@ func generateConcatenatedCode(
 		slog.Info("Skipping directory scan as no scan directories were provided or determined.")
 	}
 
-	// --- Finalize ---
-	output = outputBuilder.String() // Directly get string
+	output = outputBuilder.String()
 	return
 }

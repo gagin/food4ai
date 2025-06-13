@@ -29,6 +29,14 @@ Changed
 
 *   Refine unit tests after integration test fixes.
 
+`0.4.2`_ - 2025-06-12
+---------------------
+
+Fixed
++++++
+
+*   Fixed a major bug where `.gitignore` files in the current working directory were ignored when scanning a subdirectory with the `-d` flag or a positional argument. The file walker now correctly originates from the CWD to respect its `.gitignore` rules.
+*   Fixed an issue where `exclude_basenames` from the global config file (`config.toml`) would not correctly exclude files within subdirectories matching a pattern (e.g., a file inside a `node_modules` or `build` directory was incorrectly included). Works only for full names now though.
 
 `0.4.1`_ - 2025-06-12
 ---------------------
@@ -36,7 +44,7 @@ Changed
 Fixed
 +++++
 
-*   Fixed issue where multiple -d arguments were not processed properly (or comma-separated directories in a single -d argument).
+*   Fixed issue where multiple -d arguments were not processed properly.
 
 `0.4.0`_ - 2025-04-25
 ---------------------

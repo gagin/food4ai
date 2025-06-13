@@ -11,8 +11,6 @@ formatted for easy consumption by Large Language Models (LLMs) or other AI
 analysis tools. Uses `gocodewalker <https://github.com/boyter/gocodewalker>`_ for robust, Git-compatible
 ``.gitignore`` / ``.ignore`` handling.
 
-**There's a BUG currently where .gitignore is only taken from target directories, not from the directory where the command is ran from**
-
 Purpose
 -------
 
@@ -132,7 +130,7 @@ Located at ``~/.config/codecat/config.toml`` by default.
 
 *   **`exclude_basenames = [...]`**:
 
-    *   There's a **BUG** currently where directory names aren't excluded with this rule
+    *   There's a **BUG** currently where only full directory names in parent chain are excluded with this rule, no substrings of file name matching.
     *   A list of **glob patterns** matched against the **basename** (the final file or directory name) of any item encountered during scanning *or* listed via ``-f``.
     *   **Use Case:** Globally excluding common names like ``node_modules``, ``*.log``, ``build``, ``.DS_Store``, etc., regardless of where they appear in *any* project you run ``codecat`` on. Offers broader, name-based exclusion than typical path-relative ``.gitignore``.
     *   These patterns are checked *first*. <strikethrough>If a directory basename matches, the directory and its contents are excluded (unless a file within is specified with ``-f``).

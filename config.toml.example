@@ -1,6 +1,7 @@
 # ~/.config/codecat/config.toml
 
 # Basename glob patterns matched against the final file/directory name anywhere.
+# BUG - only works for full directory names in the path
 # Useful for universally excluding common names (like build dirs, venvs)
 # or file types (like logs, compiled code) regardless of project structure.
 # These are matched *before* CWD-relative patterns or .gitignore.
